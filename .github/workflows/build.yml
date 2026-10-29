@@ -47,8 +47,10 @@ jobs:
             -dname "CN=Android Debug,O=Android,C=US"
 
       - name: Build Debug APK
+        env:
+          _JAVA_OPTIONS: "-Xmx6g -XX:ReservedCodeCacheSize=512m"
         run: |
-          ./gradlew assembleUniversalGmsDebug --no-configuration-cache --console=plain --warning-mode summary
+          ./gradlew assembleUniversalGmsDebug -Dorg.gradle.jvmargs="-Xmx6144M -XX:+UseG1GC -XX:ReservedCodeCacheSize=512M" --no-configuration-cache --console=plain --warning-mode summary
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
@@ -58,18 +60,23 @@ jobs:
 
       - name: Publish GitHub Release
         if: github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v1.0.0
-          name: Etsuko Mobile v1.0.0
-          body: |
-            ### Etsuko Mobile (Android APK)
-            - Signature Etsuko violet-blue ambient gradient home screen
-            - Full fluid glassmorphism & Cupertino iconography
-            - Local & Liked music library
-            - High-quality audio streaming engine
-          files: app/build/outputs/apk/universalGms/debug/*.apk
-          draft: false
-          prerelease: false
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v1.0.0"
+          APK_PATH=$(find app/build/outputs/apk -name '*.apk' | head -n 1)
+          if [ -n "$APK_PATH" ]; then
+            cp "$APK_PATH" "etsuko-mobile.apk"
+            echo "Found APK at $APK_PATH, creating release..."
+            gh release create "$TAG" "etsuko-mobile.apk" \
+              --repo "${{ github.repository }}" \
+              --title "Etsuko Mobile v1.0.0" \
+              --notes "### Etsuko Mobile (Android APK)
+          - Signature Etsuko violet-blue ambient gradient home screen
+          - Full fluid glassmorphism & Cupertino iconography
+          - Local & Liked music library
+          - High-quality audio streaming engine" \
+              || gh release upload "$TAG" "etsuko-mobile.apk" --repo "${{ github.repository }}" --clobber
+          else
+            echo "No APK found to release."
+          fi
