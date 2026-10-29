@@ -33,7 +33,7 @@ android {
     ndkVersion = "27.0.12077973"
 
     defaultConfig {
-        applicationId = "com.convx.music"
+        applicationId = "com.etsuko.music"
         minSdk = 26
         targetSdk = 36
         versionCode = appVersionCode
@@ -151,7 +151,7 @@ android {
             buildConfigField("String", "ARCHITECTURE", "\"release\"")
         }
         debug {
-            applicationIdSuffix = ".debug"
+            // applicationIdSuffix removed for Etsuko
             isDebuggable = true
             signingConfig = signingConfigs.getByName("debug")
             buildConfigField("String", "ARCHITECTURE", "\"debug\"")

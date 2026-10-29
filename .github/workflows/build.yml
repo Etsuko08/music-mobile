@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   build_debug:
-    name: Build Universal GMS Debug APK
+    name: Build ARM64 GMS APK
     runs-on: ubuntu-latest
     if: github.actor != 'dependabot[bot]'
     steps:
@@ -44,38 +44,52 @@ jobs:
             -keyalg RSA \
             -keysize 2048 \
             -validity 10000 \
-            -dname "CN=Android Debug,O=Android,C=US"
+            -dname "CN=Etsuko,O=Etsuko,C=IN"
 
-      - name: Build Debug APK
+      - name: Build APK
         env:
           _JAVA_OPTIONS: "-Xmx6g -XX:ReservedCodeCacheSize=512m"
         run: |
-          ./gradlew assembleUniversalGmsDebug -Dorg.gradle.jvmargs="-Xmx6144M -XX:+UseG1GC -XX:ReservedCodeCacheSize=512M" --no-configuration-cache --console=plain --warning-mode summary
+          ./gradlew assembleArm64GmsDebug -Dorg.gradle.jvmargs="-Xmx6144M -XX:+UseG1GC -XX:ReservedCodeCacheSize=512M" --no-configuration-cache --console=plain --warning-mode summary
 
-      - name: Upload Debug APK Artifact
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: etsuko-mobile-apk
-          path: app/build/outputs/apk/universalGms/debug/*.apk
+          path: app/build/outputs/apk/arm64Gms/debug/*.apk
 
       - name: Publish GitHub Release
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="v1.0.0"
+          TAG="v1.1.0"
           APK_PATH=$(find app/build/outputs/apk -name '*.apk' | head -n 1)
           if [ -n "$APK_PATH" ]; then
             cp "$APK_PATH" "etsuko-mobile.apk"
-            echo "Found APK at $APK_PATH, creating release..."
+            APK_SIZE=$(stat -c%s "etsuko-mobile.apk")
+            APK_SIZE_MB=$((APK_SIZE / 1048576))
+            echo "APK: $APK_PATH ($APK_SIZE_MB MB)"
+            
+            # Delete old releases
+            gh release delete v1.0.0 --repo "${{ github.repository }}" --yes 2>/dev/null || true
+            git push --delete origin v1.0.0 2>/dev/null || true
+            
             gh release create "$TAG" "etsuko-mobile.apk" \
               --repo "${{ github.repository }}" \
-              --title "Etsuko Mobile v1.0.0" \
-              --notes "### Etsuko Mobile (Android APK)
-          - Signature Etsuko violet-blue ambient gradient home screen
-          - Full fluid glassmorphism & Cupertino iconography
-          - Local & Liked music library
-          - High-quality audio streaming engine" \
+              --title "Etsuko Mobile v1.1.0" \
+              --notes "### Etsuko Mobile v1.1.0
+
+**What's new:**
+- App identity: com.etsuko.music (clean install, no conflicts)
+- All branding updated to Etsuko
+- ARM64 build (~100MB smaller than universal)
+- Etsuko violet-blue gradient home screen
+- Cupertino glassmorphism UI
+- High-quality audio streaming engine
+
+**Install:** Download etsuko-mobile.apk and tap to install.
+If prompted, allow 'Install from unknown sources' for your browser." \
               || gh release upload "$TAG" "etsuko-mobile.apk" --repo "${{ github.repository }}" --clobber
           else
             echo "No APK found to release."
