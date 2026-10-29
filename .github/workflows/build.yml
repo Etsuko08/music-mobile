@@ -70,26 +70,15 @@ jobs:
             APK_SIZE=$(stat -c%s "etsuko-mobile.apk")
             APK_SIZE_MB=$((APK_SIZE / 1048576))
             echo "APK: $APK_PATH ($APK_SIZE_MB MB)"
-            
-            # Delete old releases
+
             gh release delete v1.0.0 --repo "${{ github.repository }}" --yes 2>/dev/null || true
             git push --delete origin v1.0.0 2>/dev/null || true
-            
+
+            NOTES="Etsuko Mobile v1.1.0 - ARM64 build with com.etsuko.music identity. Download and tap to install."
             gh release create "$TAG" "etsuko-mobile.apk" \
               --repo "${{ github.repository }}" \
               --title "Etsuko Mobile v1.1.0" \
-              --notes "### Etsuko Mobile v1.1.0
-
-**What's new:**
-- App identity: com.etsuko.music (clean install, no conflicts)
-- All branding updated to Etsuko
-- ARM64 build (~100MB smaller than universal)
-- Etsuko violet-blue gradient home screen
-- Cupertino glassmorphism UI
-- High-quality audio streaming engine
-
-**Install:** Download etsuko-mobile.apk and tap to install.
-If prompted, allow 'Install from unknown sources' for your browser." \
+              --notes "$NOTES" \
               || gh release upload "$TAG" "etsuko-mobile.apk" --repo "${{ github.repository }}" --clobber
           else
             echo "No APK found to release."
