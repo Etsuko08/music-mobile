@@ -1075,10 +1075,11 @@ object YTPlayerUtils {
         if (metaDeferred != null && metadataResponse == null) {
             Timber.tag(logTag).w("Metadata not ready within ${MetadataWaitMs}ms -- playing without it")
         }
+        val effectiveResponse = metadataResponse ?: mainPlayerResponse ?: streamPlayerResponse
         PlaybackData(
-            metadataResponse?.playerConfig?.audioConfig ?: mainPlayerResponse.playerConfig?.audioConfig,
-            metadataResponse?.videoDetails ?: mainPlayerResponse.videoDetails,
-            metadataResponse?.playbackTracking ?: mainPlayerResponse.playbackTracking,
+            effectiveResponse?.playerConfig?.audioConfig,
+            effectiveResponse?.videoDetails,
+            effectiveResponse?.playbackTracking,
             format,
             streamUrl,
             expiresInSeconds,
