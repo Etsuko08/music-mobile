@@ -174,13 +174,15 @@ private fun isDevotionalItem(item: YTItem): Boolean {
     when (item) {
         is SongItem -> {
             if (item.artists.any { isDevotionalText(it.name) }) return true
-            if (item.album != null && isDevotionalText(item.album.name)) return true
+            val album = item.album
+            if (album != null && isDevotionalText(album.name)) return true
         }
         is AlbumItem -> {
             if (item.artists?.any { isDevotionalText(it.name) } == true) return true
         }
         is PlaylistItem -> {
-            if (item.author != null && isDevotionalText(item.author.name)) return true
+            val author = item.author
+            if (author != null && isDevotionalText(author.name)) return true
         }
         else -> {}
     }

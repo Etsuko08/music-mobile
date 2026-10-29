@@ -37,4 +37,6 @@ object ListenTogetherServers {
 
     val defaultServerUrl: String
         get() = servers.first().url
+
+    fun findByUrl(url: String): ListenTogetherServer? = servers.firstOrNull { it.url == url }
 }
