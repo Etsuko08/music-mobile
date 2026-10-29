@@ -283,7 +283,7 @@ object YTPlayerUtils {
      * playbackTracking must be supplemented from an authenticated client (WEB_REMIX)
      * when the user is logged in.
      */
-    private val MAIN_CLIENT: YouTubeClient = IOS
+    private val MAIN_CLIENT: YouTubeClient = ANDROID_VR_1_43_32
 
     /** Used when a player response omits streamingData.expiresInSeconds — 6h, YouTube's usual value. */
     private const val DEFAULT_STREAM_EXPIRY_SECONDS = 21600
@@ -303,11 +303,12 @@ object YTPlayerUtils {
      * and supports more formats when available.
      */
     private val STREAM_FALLBACK_CLIENTS: Array<YouTubeClient> = arrayOf(
+        IOS,
+        ANDROID_VR_1_61_48,
+        ANDROID_VR_1_65_10,
         TVHTML5_SIMPLY_EMBEDDED_PLAYER,
         TVHTML5,
         VISIONOS,
-        ANDROID_VR_1_61_48,
-        ANDROID_VR_1_65_10,
         WEB_REMIX,
         ANDROID_CREATOR,
         IPADOS,
@@ -658,12 +659,7 @@ object YTPlayerUtils {
                 if (saavnResult != null) {
                     return Result.success(saavnResult)
                 }
-                if (!context.dataStore.get(SaavnFallbackToYouTubeKey, true)) {
-                    Timber.tag(TAG).d("Saavn intercept failed and YouTube fallback is off — failing playback")
-                    return Result.failure(IOException("No matching track found on JioSaavn"))
-                }
-                // Any exception or null → fall through to YouTube below
-                Timber.tag(TAG).d("Saavn intercept failed or returned null — falling back to YouTube")
+                Timber.tag(TAG).d("Saavn intercept returned null or failed — falling back to YouTube seamlessly")
             }
         }
 
@@ -830,18 +826,16 @@ object YTPlayerUtils {
         Timber.tag(logTag).d("Attempting to get player response using MAIN_CLIENT: ${MAIN_CLIENT.clientName}")
         PlaybackLogManager.log(PlaybackLogLevel.DEBUG, "Trying ${MAIN_CLIENT.clientName} (Main)")
         var mainPlayerResponse =
-            YouTube.player(videoId, playlistId, MAIN_CLIENT, signatureTimestampFor(MAIN_CLIENT), poToken?.playerRequestPoToken).getOrThrow()
+            YouTube.player(videoId, playlistId, MAIN_CLIENT, signatureTimestampFor(MAIN_CLIENT), poToken?.playerRequestPoToken).getOrNull()
 
         var usedAgeRestrictedClient: YouTubeClient? = null
         val wasOriginallyAgeRestricted: Boolean
 
-        // ANDROID_VR uses LOGIN_REQUIRED for bot detection, not age gating.
-        val mainStatus = mainPlayerResponse.playabilityStatus.status
-        val isAgeRestrictedFromResponse = isAgeRestrictedStatus(mainStatus)
+        val mainStatus = mainPlayerResponse?.playabilityStatus?.status
+        val isAgeRestrictedFromResponse = if (mainStatus != null) isAgeRestrictedStatus(mainStatus) else false
         wasOriginallyAgeRestricted = isAgeRestrictedFromResponse
 
         if (isAgeRestrictedFromResponse && isLoggedIn) {
-            // Age-restricted: use WEB_CREATOR directly (no NewPipe needed from here)
             Timber.tag(logTag).d("Age-restricted detected, using WEB_CREATOR")
             Timber.tag(TAG).i("Age-restricted: using WEB_CREATOR for videoId=$videoId")
             val creatorResponse = YouTube.player(videoId, playlistId, WEB_CREATOR, null, null).getOrNull()
@@ -858,19 +852,19 @@ object YTPlayerUtils {
         var streamPlayerResponse: PlayerResponse? = null
         var retryMainPlayerResponse: PlayerResponse? = if (usedAgeRestrictedClient != null) mainPlayerResponse else null
 
-        val currentStatus = mainPlayerResponse.playabilityStatus.status
-        val isAgeRestricted = isAgeRestrictedStatus(currentStatus)
+        val currentStatus = mainPlayerResponse?.playabilityStatus?.status
+        val isAgeRestricted = if (currentStatus != null) isAgeRestrictedStatus(currentStatus) else false
 
         if (isAgeRestricted) {
             Timber.tag(logTag).d("Content is still age-restricted (status: $currentStatus), will try fallback clients")
             Timber.tag(TAG).i("Age-restricted content detected: videoId=$videoId, status=$currentStatus")
         }
 
-        val isPrivateTrack = mainPlayerResponse.videoDetails?.musicVideoType == "MUSIC_VIDEO_TYPE_PRIVATELY_OWNED_TRACK"
+        val isPrivateTrack = mainPlayerResponse?.videoDetails?.musicVideoType == "MUSIC_VIDEO_TYPE_PRIVATELY_OWNED_TRACK"
 
-        // Uploads start at TVHTML5; age-restricted videos skip the main client.
-        // Other tracks try the main client first.
+        // If main client returned null or failed, immediately iterate fallback clients starting at 0
         val startIndex = when {
+            mainPlayerResponse == null || currentStatus != "OK" -> 0
             isPrivateTrack -> STREAM_FALLBACK_CLIENTS.indexOf(TVHTML5).coerceAtLeast(0)
             isAgeRestricted -> 0
             else -> -1

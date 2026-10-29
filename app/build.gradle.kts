@@ -154,7 +154,7 @@ android {
             // applicationIdSuffix removed for Etsuko
             isDebuggable = true
             signingConfig = signingConfigs.getByName("debug")
-            buildConfigField("String", "ARCHITECTURE", "\"debug\"")
+            buildConfigField("String", "ARCHITECTURE", "\"arm64\"")
         }
     }
 

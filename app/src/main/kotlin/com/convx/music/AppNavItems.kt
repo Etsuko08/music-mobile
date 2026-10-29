@@ -45,8 +45,9 @@ fun rememberAppNavItems(): AppNavItems {
         visible.filter { it == Screens.Search || it.route !in hiddenRoutes }
     }
     // Explore is only shown in the floating navigation bar, and is online-only.
-    val floatingNavigationItems = remember(navigationItems, localOnlyMode, hiddenRoutes) {
-        if (localOnlyMode || Screens.Explore.route in hiddenRoutes) navigationItems else navigationItems + Screens.Explore
+    // Explore removed for clean streamlined Etsuko navigation
+    val floatingNavigationItems = remember(navigationItems) {
+        navigationItems
     }
     return remember(listenTogetherInTopBar, localOnlyMode, navigationItems, floatingNavigationItems) {
         AppNavItems(listenTogetherInTopBar, localOnlyMode, navigationItems, floatingNavigationItems)

@@ -94,7 +94,7 @@ sealed class Screens(
     companion object {
         // Keep Listen Together out of the tab pager to avoid showing it during tab switches.
         // Lazy initialization avoids reading singleton routes before their objects initialize.
-        val MainScreens: List<Screens> by lazy { listOf(Home, Search, Radio, Library) }
+        val MainScreens: List<Screens> by lazy { listOf(Home, Search, Library) }
 
         /**
          * Local-only mode promotes [Songs] and omits online destinations.

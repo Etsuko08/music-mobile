@@ -152,16 +152,23 @@ fun AboutScreen(
             }
         }
         
-        // Developer Section
+        // Developer Section with Etsuko GitHub Avatar
         IosSettingsGroup(
             title = stringResource(R.string.developer_section),
             items = listOf(
                 IosSettingsItem(
-                    icon = rememberVectorPainter(SfSymbols.Monochrome.SFPersonCropCircleBadgeExclamationmark),
+                    leadingContent = {
+                        coil3.compose.AsyncImage(
+                            model = "https://github.com/Etsuko08.png",
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(30.dp)
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                    },
                     title = { Text(stringResource(R.string.developer_name)) },
                     description = { Text(stringResource(R.string.app_developer), color = AppTheme.colorScheme.primary) },
-                    tintIcon = false,
-                    iconShape = cookieShape,
                     onClick = { uriHandler.safeOpenUri(context, "https://github.com/Etsuko08") }
                 )
             )
@@ -182,32 +189,14 @@ fun AboutScreen(
                     icon = rememberVectorPainter(SfSymbols.Monochrome.SFEllipsisBubble),
                     title = { Text(stringResource(R.string.discord_channel)) },
                     description = { Text(stringResource(R.string.join_discord)) },
-                    onClick = { uriHandler.safeOpenUri(context, "https://discord.gg/Ejeb4cmzfd") }
+                    onClick = { uriHandler.safeOpenUri(context, "https://discord.gg/CPsjwFPkfX") }
                 )
             )
         )
 
         Spacer(modifier = Modifier.height(27.dp))
 
-        // Support Section
-        IosSettingsGroup(
-            title = stringResource(R.string.support_section),
-            items = listOf(
-                IosSettingsItem(
-                    icon = rememberVectorPainter(SfSymbols.Monochrome.SFHeart),
-                    title = { Text(stringResource(R.string.support_upi)) },
-                    description = { Text(DonationUpiId) },
-                    onClick = { uriHandler.safeOpenUri(context, DonationUpiUri) }
-                ),
-                IosSettingsItem(
-                    icon = rememberVectorPainter(SfSymbols.Monochrome.SFHeart),
-                    title = { Text(stringResource(R.string.support_kofi)) },
-                    description = { Text(stringResource(R.string.support_kofi_desc)) },
-                    onClick = { uriHandler.safeOpenUri(context, DonationKofiUrl) }
-                ),
-            )
-        )
-        Spacer(modifier = Modifier.height(27.dp))
+// Support section removed for Etsuko
 
         // App Information Section
         IosSettingsGroup(

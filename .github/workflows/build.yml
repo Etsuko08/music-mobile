@@ -63,7 +63,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="v1.1.0"
+          TAG="v1.2.0"
           APK_PATH=$(find app/build/outputs/apk -name '*.apk' | head -n 1)
           if [ -n "$APK_PATH" ]; then
             cp "$APK_PATH" "etsuko-mobile.apk"
@@ -71,13 +71,13 @@ jobs:
             APK_SIZE_MB=$((APK_SIZE / 1048576))
             echo "APK: $APK_PATH ($APK_SIZE_MB MB)"
 
-            gh release delete v1.0.0 --repo "${{ github.repository }}" --yes 2>/dev/null || true
-            git push --delete origin v1.0.0 2>/dev/null || true
+            gh release delete v1.1.0 --repo "${{ github.repository }}" --yes 2>/dev/null || true
+            git push --delete origin v1.1.0 2>/dev/null || true
 
-            NOTES="Etsuko Mobile v1.1.0 - ARM64 build with com.etsuko.music identity. Download and tap to install."
+            NOTES="Etsuko Mobile v1.2.0 - Complete rebranding, custom Etsuko monogram logo, streamlined navigation (Home, Search, Library), hardened audio engine with auto-fallback, developer GitHub profile integration, and custom Discord community links."
             gh release create "$TAG" "etsuko-mobile.apk" \
               --repo "${{ github.repository }}" \
-              --title "Etsuko Mobile v1.1.0" \
+              --title "Etsuko Mobile v1.2.0" \
               --notes "$NOTES" \
               || gh release upload "$TAG" "etsuko-mobile.apk" --repo "${{ github.repository }}" --clobber
           else

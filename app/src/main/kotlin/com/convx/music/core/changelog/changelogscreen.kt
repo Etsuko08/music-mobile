@@ -143,7 +143,7 @@ fun ChangelogScreen(
                         showingCached = true
                     }
                 } else {
-                    val changelogUrl = URL("https://github.com/cosmictaserdev-creator/Convx/releases/download/$tag/changelog.json")
+                    val changelogUrl = URL("https://github.com/Etsuko08/music-mobile/releases/download/$tag/changelog.json")
                     val connection = changelogUrl.openConnection() as HttpURLConnection
                     connection.setRequestProperty("User-Agent", "Convx-Changelog-App")
                     connection.setRequestProperty("Accept", "application/json")
@@ -197,8 +197,32 @@ fun ChangelogScreen(
                             showingCached = false
                         }
                     } else {
-                        Timber.tag("ChangelogScreen").e("HTTP Error ${connection.responseCode} for $tag")
-                        withContext(Dispatchers.Main) { hasError = true; isLoading = false }
+                        // Fall back to fetching the GitHub Release body directly
+                        try {
+                            val releaseApiUrl = URL("https://api.github.com/repos/Etsuko08/music-mobile/releases/tags/$tag")
+                            val apiConn = releaseApiUrl.openConnection() as HttpURLConnection
+                            apiConn.setRequestProperty("User-Agent", "Etsuko-Mobile-App")
+                            apiConn.setRequestProperty("Accept", "application/vnd.github+json")
+                            if (apiConn.responseCode == 200) {
+                                val releaseJson = apiConn.inputStream.bufferedReader().use { it.readText() }
+                                val releaseObj = JSONObject(releaseJson)
+                                val body = releaseObj.optString("body", "Release $tag")
+                                val desc = releaseObj.optString("name", tag)
+                                val lines = body.lines().filter { it.isNotBlank() }
+                                val sections = listOf(ChangelogSection("What's New in $tag", lines))
+                                saveChangelogToCache(context, tag, sections, null, desc, null)
+                                withContext(Dispatchers.Main) {
+                                    changelogSections = sections
+                                    updateDescription = desc
+                                    isLoading = false
+                                    hasError = false
+                                }
+                            } else {
+                                withContext(Dispatchers.Main) { hasError = true; isLoading = false }
+                            }
+                        } catch (ex: Exception) {
+                            withContext(Dispatchers.Main) { hasError = true; isLoading = false }
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -216,7 +240,7 @@ fun ChangelogScreen(
         isFetchingOldReleases = true
         coroutineScope.launch(Dispatchers.IO) {
             try {
-                val releasesUrl = URL("https://api.github.com/repos/cosmictaserdev-creator/Convx/releases")
+                val releasesUrl = URL("https://api.github.com/repos/Etsuko08/music-mobile/releases")
                 val connection = releasesUrl.openConnection() as HttpURLConnection
                 connection.setRequestProperty("User-Agent", "Convx-Changelog-App")
                 connection.setRequestProperty("Accept", "application/vnd.github+json")

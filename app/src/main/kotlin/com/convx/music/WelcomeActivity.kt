@@ -315,7 +315,7 @@ fun WelcomePagerScreen(onFinished: () -> Unit) {
                         lineHeight = 56.sp
                     )
 
-                    val flavorSuffix = if (BuildConfig.FLAVOR.contains("gms", ignoreCase = true)) "Gms Edition" else "Foss Edition"
+                    val flavorSuffix = "Mobile Edition"
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(start = 2.dp)
@@ -507,7 +507,7 @@ fun WelcomePagerScreen(onFinished: () -> Unit) {
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text(
-                        text = "Convx is open-source and depends on community support to grow. Your help makes a difference!",
+                        text = "Etsuko is open-source and depends on community support to grow. Your help makes a difference!",
                         style = AppTheme.typography.bodyLarge.copy(
                             fontFamily = GoogleSansFlex
                         ),
@@ -532,7 +532,7 @@ fun WelcomePagerScreen(onFinished: () -> Unit) {
                                 SymbolIcon(symbol = sf("chevron.right"), contentDescription = null, tint = AppTheme.colorScheme.onSurfaceVariant)
                             },
                             onClick = {
-                                uriHandler.safeOpenUri(context, "https://github.com/cosmictaserdev-creator/Convx")
+                                uriHandler.safeOpenUri(context, "https://github.com/Etsuko08/music-mobile")
                             }
                         )
 
@@ -549,7 +549,7 @@ fun WelcomePagerScreen(onFinished: () -> Unit) {
                                 SymbolIcon(symbol = sf("chevron.right"), contentDescription = null, tint = AppTheme.colorScheme.onSurfaceVariant)
                             },
                             onClick = {
-                                uriHandler.safeOpenUri(context, "https://discord.gg/Ejeb4cmzfd")
+                                uriHandler.safeOpenUri(context, "https://discord.gg/CPsjwFPkfX")
                             }
                         )
 
