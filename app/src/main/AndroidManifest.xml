@@ -116,18 +116,19 @@
                 <data android:pathPrefix="/listen" />
             </intent-filter>
 
-            <!-- Party invite: convx://party/CODE -->
+            <!-- Party invite: etsuko://party/CODE -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
 
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
 
+                <data android:scheme="etsuko" />
                 <data android:scheme="convx" />
                 <data android:host="party" />
             </intent-filter>
 
-            <!-- General Convx scheme for direct deep links (convx://watch?v=..., convx://playlist?list=..., etc.) -->
+            <!-- General Etsuko scheme for direct deep links (convx://watch?v=..., convx://playlist?list=..., etc.) -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
@@ -135,6 +136,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
 
+                <data android:scheme="etsuko" />
                 <data android:scheme="convx" />
             </intent-filter>
 
@@ -180,7 +182,7 @@
                 <data android:pathPrefix="/search" />
             </intent-filter>
 
-            <!-- Convx domain filter -->
+            <!-- Etsuko / YouTube domain filter -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
@@ -191,7 +193,7 @@
 
                 <data android:scheme="http" />
                 <data android:scheme="https" />
-                <data android:host="convx.aryavl.com" />
+                <data android:host="music.youtube.com" />
                 <!-- video prefix -->
                 <data android:pathPrefix="/v/" />
                 <data android:pathPrefix="/watch" />

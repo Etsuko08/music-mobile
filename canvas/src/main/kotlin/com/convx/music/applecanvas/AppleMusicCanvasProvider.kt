@@ -2,7 +2,7 @@
  * Convx Project (C) 2026
  * Licensed under GPL-3.0 | See git history for contributors
  */
-// Ported from cosmictaserdev-creator/convx (https://github.com/cosmictaserdev-creator/Convx), GPL-3.0.
+// Ported from Etsuko08/music-mobile (https://github.com/Etsuko08/music-mobile), GPL-3.0.
 
 package com.convx.music.applecanvas
 

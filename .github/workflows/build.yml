@@ -12,8 +12,8 @@ permissions:
   contents: write
 
 jobs:
-  build_debug:
-    name: Build ARM64 GMS APK
+  build_release:
+    name: Build ARM64 GMS Release APK
     runs-on: ubuntu-latest
     if: github.actor != 'dependabot[bot]'
     steps:
@@ -33,9 +33,9 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Generate debug.keystore
+      - name: Generate Signing Keystores
         run: |
-          mkdir -p ~/.android
+          mkdir -p ~/.android app/keystore
           keytool -genkey -v \
             -keystore ~/.android/debug.keystore \
             -storepass android \
@@ -45,25 +45,37 @@ jobs:
             -keysize 2048 \
             -validity 10000 \
             -dname "CN=Etsuko,O=Etsuko,C=IN"
+          keytool -genkey -v \
+            -keystore app/keystore/release.keystore \
+            -storepass etsukokey \
+            -alias etsuko \
+            -keypass etsukokey \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Etsuko,O=Etsuko,C=IN"
 
-      - name: Build APK
+      - name: Build Optimized Release APK
         env:
           _JAVA_OPTIONS: "-Xmx6g -XX:ReservedCodeCacheSize=512m"
+          STORE_PASSWORD: "etsukokey"
+          KEY_ALIAS: "etsuko"
+          KEY_PASSWORD: "etsukokey"
         run: |
-          ./gradlew assembleArm64GmsDebug -Dorg.gradle.jvmargs="-Xmx6144M -XX:+UseG1GC -XX:ReservedCodeCacheSize=512M" --no-configuration-cache --console=plain --warning-mode summary
+          ./gradlew assembleArm64GmsRelease -Dorg.gradle.jvmargs="-Xmx6144M -XX:+UseG1GC -XX:ReservedCodeCacheSize=512M" --no-configuration-cache --console=plain --warning-mode summary
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: etsuko-mobile-apk
-          path: app/build/outputs/apk/arm64Gms/debug/*.apk
+          path: app/build/outputs/apk/**/release/*.apk
 
       - name: Publish GitHub Release
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="v1.2.0"
+          TAG="v1.3.0"
           APK_PATH=$(find app/build/outputs/apk -name '*.apk' | head -n 1)
           if [ -n "$APK_PATH" ]; then
             cp "$APK_PATH" "etsuko-mobile.apk"
@@ -71,13 +83,10 @@ jobs:
             APK_SIZE_MB=$((APK_SIZE / 1048576))
             echo "APK: $APK_PATH ($APK_SIZE_MB MB)"
 
-            gh release delete v1.1.0 --repo "${{ github.repository }}" --yes 2>/dev/null || true
-            git push --delete origin v1.1.0 2>/dev/null || true
-
-            NOTES="Etsuko Mobile v1.2.0 - Complete rebranding, custom Etsuko monogram logo, streamlined navigation (Home, Search, Library), hardened audio engine with auto-fallback, developer GitHub profile integration, and custom Discord community links."
+            NOTES="Etsuko Mobile v1.3.0 - Official Etsuko brand split-disc icon, 120Hz high refresh rate, startup lag fix, clean home feed recommendations (filtered devotional/bhajan content), direct YouTube Music Discord rich presence integration, and R8-optimized release build."
             gh release create "$TAG" "etsuko-mobile.apk" \
               --repo "${{ github.repository }}" \
-              --title "Etsuko Mobile v1.2.0" \
+              --title "Etsuko Mobile v1.3.0" \
               --notes "$NOTES" \
               || gh release upload "$TAG" "etsuko-mobile.apk" --repo "${{ github.repository }}" --clobber
           else

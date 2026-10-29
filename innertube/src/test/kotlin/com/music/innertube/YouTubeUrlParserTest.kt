@@ -23,11 +23,11 @@ class YouTubeUrlParserTest {
         )
         assertEquals(
             YouTubeUrlParser.ParsedUrl.Video("abcdefghijk"),
-            YouTubeUrlParser.parse("https://convx.aryavl.com/watch?v=abcdefghijk"),
+            YouTubeUrlParser.parse("https://music.youtube.com/watch?v=abcdefghijk"),
         )
         assertEquals(
             YouTubeUrlParser.ParsedUrl.Video("abcdefghijk"),
-            YouTubeUrlParser.parse("https://convx.aryavl.com/song/abcdefghijk"),
+            YouTubeUrlParser.parse("https://music.youtube.com/song/abcdefghijk"),
         )
     }
 
@@ -43,11 +43,11 @@ class YouTubeUrlParserTest {
         )
         assertEquals(
             YouTubeUrlParser.ParsedUrl.Artist("UCabcdefghijk"),
-            YouTubeUrlParser.parse("https://convx.aryavl.com/channel/UCabcdefghijk"),
+            YouTubeUrlParser.parse("https://music.youtube.com/channel/UCabcdefghijk"),
         )
         assertEquals(
             YouTubeUrlParser.ParsedUrl.Artist("UCabcdefghijk"),
-            YouTubeUrlParser.parse("https://convx.aryavl.com/artist/UCabcdefghijk"),
+            YouTubeUrlParser.parse("https://music.youtube.com/artist/UCabcdefghijk"),
         )
     }
 

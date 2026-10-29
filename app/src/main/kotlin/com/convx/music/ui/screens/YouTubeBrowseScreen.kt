@@ -286,6 +286,8 @@ internal fun EditorialCard(item: YTItem) {
         Spacer(Modifier.height(8.dp))
         AsyncImage(
             model = item.thumbnail,
+            placeholder = painterResource(R.drawable.thumbnail_fallback),
+            error = painterResource(R.drawable.thumbnail_fallback),
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier
@@ -305,6 +307,8 @@ internal fun ShelfCard(item: YTItem) {
     Column(Modifier.width(154.dp)) {
         AsyncImage(
             model = item.thumbnail,
+            placeholder = painterResource(R.drawable.thumbnail_fallback),
+            error = painterResource(R.drawable.thumbnail_fallback),
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier

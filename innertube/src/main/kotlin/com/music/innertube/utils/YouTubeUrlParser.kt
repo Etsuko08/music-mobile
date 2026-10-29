@@ -46,7 +46,7 @@ object YouTubeUrlParser {
             }
         }
 
-        if (trimmedUrl.contains("music.youtube.com") || trimmedUrl.contains("convx.aryavl.com")) {
+        if (trimmedUrl.contains("music.youtube.com") || trimmedUrl.contains("music.youtube.com")) {
             for (pattern in ARTIST_URL_PATTERNS) {
                 pattern.find(trimmedUrl)?.let { matchResult ->
                     matchResult.groupValues.getOrNull(1)?.let { artistId ->

@@ -155,6 +155,29 @@ class MainActivity : ComponentActivity() {
         window.decorView.layoutDirection = View.LAYOUT_DIRECTION_LTR
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
+        // Request maximum refresh rate available (120Hz/90Hz) for ultra-smooth scrolling and animations
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.decorView.post {
+                val display = window.decorView.display
+                val maxMode = display?.supportedModes?.maxByOrNull { it.refreshRate }
+                if (maxMode != null) {
+                    val params = window.attributes
+                    params.preferredDisplayModeId = maxMode.modeId
+                    window.attributes = params
+                }
+            }
+            try {
+                window.setFrameRate(120f, WindowManager.LayoutParams.FRAME_RATE_COMPATIBILITY_DEFAULT)
+            } catch (_: Throwable) {}
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val maxMode = window.windowManager.defaultDisplay.supportedModes?.maxByOrNull { it.refreshRate }
+            if (maxMode != null) {
+                val params = window.attributes
+                params.preferredDisplayModeId = maxMode.modeId
+                window.attributes = params
+            }
+        }
+
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             val locale = dataStore[AppLanguageKey]
                 ?.takeUnless { it == SYSTEM_DEFAULT }
@@ -181,7 +204,7 @@ class MainActivity : ComponentActivity() {
 
         // Cold launch from the launcher only (WelcomeActivity hands off with this extra);
         // notification/deep-link opens go straight to the app.
-        val playIntro = savedInstanceState == null && intent.getBooleanExtra(EXTRA_PLAY_INTRO, false)
+        val playIntro = false
         setContent {
             var showIntro by rememberSaveable { mutableStateOf(playIntro) }
             Box(Modifier.fillMaxSize()) {

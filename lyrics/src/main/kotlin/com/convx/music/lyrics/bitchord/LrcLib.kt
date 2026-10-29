@@ -25,7 +25,7 @@ import kotlin.math.abs
 object LrcLib {
 
     private const val BASE = "https://lrclib.net/api"
-    private const val AGENT = "Convx (https://github.com/cosmictaserdev-creator/Convx)"
+    private const val AGENT = "Convx (https://github.com/Etsuko08/music-mobile)"
 
     private val json = Json { ignoreUnknownKeys = true }
 

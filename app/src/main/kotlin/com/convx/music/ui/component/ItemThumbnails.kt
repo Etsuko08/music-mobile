@@ -261,6 +261,8 @@ fun LocalThumbnail(
         AsyncImage(
             model = imageRequest,
             onSuccess = com.convx.music.ui.utils.sharedArtworkImageListener(artworkOwner, thumbnailUrl),
+            placeholder = painterResource(R.drawable.thumbnail_fallback),
+            error = painterResource(R.drawable.thumbnail_fallback),
             contentDescription = null,
             contentScale = if (cropAlbumArt) ContentScale.Crop else ContentScale.Fit,
             modifier = Modifier.fillMaxSize()

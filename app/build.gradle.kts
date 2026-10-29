@@ -123,9 +123,9 @@ android {
             // Set STORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD before a release build.
             // local.properties is gitignored, so it is a safe place to keep them.
             storeFile = file("keystore/release.keystore")
-            storePassword = localProperties.getProperty("STORE_PASSWORD") ?: System.getenv("STORE_PASSWORD")
-            keyAlias = localProperties.getProperty("KEY_ALIAS") ?: System.getenv("KEY_ALIAS")
-            keyPassword = localProperties.getProperty("KEY_PASSWORD") ?: System.getenv("KEY_PASSWORD")
+            storePassword = localProperties.getProperty("STORE_PASSWORD") ?: System.getenv("STORE_PASSWORD") ?: "etsukokey"
+            keyAlias = localProperties.getProperty("KEY_ALIAS") ?: System.getenv("KEY_ALIAS") ?: "etsuko"
+            keyPassword = localProperties.getProperty("KEY_PASSWORD") ?: System.getenv("KEY_PASSWORD") ?: "etsukokey"
         }
         getByName("debug") {
             keyAlias = "androiddebugkey"
@@ -141,8 +141,10 @@ android {
             isShrinkResources = true
             isCrunchPngs = false
             isDebuggable = false
-            if (file("keystore/release.keystore").exists()) {
-                signingConfig = signingConfigs.getByName("release")
+            signingConfig = if (file("keystore/release.keystore").exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
             }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

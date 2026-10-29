@@ -159,10 +159,39 @@ private fun isCommunityPlaylist(playlist: PlaylistItem): Boolean =
         !playlist.id.startsWith("RD") &&
         !playlist.id.startsWith("OLAK")
 
+
+private val DEVOTIONAL_FILTER_REGEX = Regex(
+    "(?i)\\b(bhajan|bhakt|bhakti|aarti|arti|chalisa|mantra|stotram|stuti|katha|shabad|kirtan|devotional|sanskrit|dhun|pravachan|satsang|anand\\s+sahib|shriram|shri\\s+ram|ram\\s+bhajan|baba\\s+ramdev|shirdi|sai\\s+baba|hanuman\\s+chalisa|ganesh\\s+aarti|shiv\\s+bhajan|krishna\\s+bhajan|waheguru|satnam|guru\\s+nanak|mata\\s+ke\\s+bhetein|jagran|japji\\s+sahib|sukhamani\\s+sahib|paath|rehras|ardas|vedic|shloka|sloka|chalisas|stotras|amritwani|jai\\s+shri\\s+ram|har\\s+har\\s+mahadev|mahadev\\s+bhajan|radha\\s+krishna\\s+bhajan|bhagwat|geeta\\s+updesh|bhajan\\s+kirtan|bhole\\s+baba)\\b"
+)
+
+private fun isDevotionalText(text: String?): Boolean {
+    if (text.isNullOrBlank()) return false
+    return DEVOTIONAL_FILTER_REGEX.containsMatchIn(text)
+}
+
+private fun isDevotionalItem(item: YTItem): Boolean {
+    if (isDevotionalText(item.title)) return true
+    when (item) {
+        is SongItem -> {
+            if (item.artists.any { isDevotionalText(it.name) }) return true
+            if (item.album != null && isDevotionalText(item.album.name)) return true
+        }
+        is AlbumItem -> {
+            if (item.artists?.any { isDevotionalText(it.name) } == true) return true
+        }
+        is PlaylistItem -> {
+            if (item.author != null && isDevotionalText(item.author.name)) return true
+        }
+        else -> {}
+    }
+    return false
+}
+
 private fun List<YTItem>.filterRecommendationItems(
     hideExplicit: Boolean,
     hideVideoSongs: Boolean,
 ): List<YTItem> = distinctBy { it.id }
+    .filterNot { isDevotionalItem(it) }
     .filterExplicit(hideExplicit)
     .filterVideoSongs(hideVideoSongs)
     .shuffled()
@@ -748,6 +777,7 @@ class HomeViewModel @Inject constructor(
         YouTube.home().onSuccess { page ->
             val seenTitles = mutableSetOf<String>()
             val sections = (page.sections + newReleases.await()).mapNotNull { section ->
+                if (isDevotionalText(section.title)) return@mapNotNull null
                 if (!seenTitles.add(section.title.lowercase())) return@mapNotNull null
                 val filteredItems = filterHomeItems(
                     section.items,
@@ -791,7 +821,8 @@ class HomeViewModel @Inject constructor(
         if (!hideExplicit && !hideVideoSongs && !hideYoutubeShorts) return items
 
         return items.filter { item ->
-            (!hideExplicit || !item.explicit) &&
+            !isDevotionalItem(item) &&
+                (!hideExplicit || !item.explicit) &&
                 (!hideVideoSongs || item !is SongItem || !item.isVideoSong) &&
                 (!hideYoutubeShorts || item !is PlaylistItem || !item.id.startsWith("SS"))
         }
