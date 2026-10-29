@@ -166,9 +166,6 @@ class MainActivity : ComponentActivity() {
                     window.attributes = params
                 }
             }
-            try {
-                window.setFrameRate(120f, WindowManager.LayoutParams.FRAME_RATE_COMPATIBILITY_DEFAULT)
-            } catch (_: Throwable) {}
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val maxMode = window.windowManager.defaultDisplay.supportedModes?.maxByOrNull { it.refreshRate }
             if (maxMode != null) {
