@@ -13,19 +13,21 @@ import android.webkit.CookieManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import com.convx.music.ui.ios.compat.AppTheme
-import com.convx.music.ui.ios.compat.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
@@ -33,6 +35,7 @@ import androidx.navigation.NavController
 import com.convx.music.LocalPlayerAwareWindowInsets
 import com.convx.music.R
 import com.convx.music.constants.DiscordTokenKey
+import com.convx.music.ui.component.FrostedTopBar
 import com.convx.music.ui.utils.backToMain
 import com.convx.music.utils.rememberPreference
 import org.json.JSONTokener
@@ -77,19 +80,26 @@ fun DiscordLoginScreen(navController: NavController) {
         }
     }
 
-    SettingsScaffold(
-        navController = navController,
-        title = stringResource(R.string.action_login),
-        // A login form, not a feed — nothing scrolls under the bar, so the
-        // compact title is simply always there.
-        titleAlpha = 1f,
-        pageColor = AppTheme.colorScheme.background,
+    // Keep Chromium's hardware-accelerated surface out of Haze/Glass backdrop captures to eliminate rapid flickering.
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AppTheme.colorScheme.background),
     ) {
+        FrostedTopBar(
+            title = stringResource(R.string.action_login),
+            titleAlpha = 1f,
+            onBack = navController::navigateUp,
+            onBackLongClick = navController::backToMain,
+        )
+
         AndroidView(
-            // Keep WebView out of the backdrop capture; recording it causes flicker.
             modifier = Modifier
-                .windowInsetsPadding(LocalPlayerAwareWindowInsets.current)
-                .fillMaxSize(),
+                .fillMaxWidth()
+                .weight(1f)
+                .windowInsetsPadding(
+                    LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)
+                ),
             factory = { context ->
                 WebView(context).apply {
                     layoutParams = ViewGroup.LayoutParams(
@@ -103,13 +113,10 @@ fun DiscordLoginScreen(navController: NavController) {
                     settings.javaScriptCanOpenWindowsAutomatically = true
                     settings.setSupportMultipleWindows(false)
                     // Discord's 2FA challenge (and its captcha widget) runs on a
-                    // separate origin and needs third-party cookies to complete —
-                    // WebView blocks those by default, so 2FA accounts got stuck
-                    // partway through login with no visible error.
+                    // separate origin and needs third-party cookies to complete.
                     CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
 
                     // Motorola WebView needs the Samsung user agent to complete Discord login.
-                    // See: https://github.com/dead8309/Kizzy/issues/345#issuecomment-2699729072
                     if (Build.MANUFACTURER.equals(MOTOROLA, ignoreCase = true)) {
                         settings.userAgentString = SAMSUNG_USER_AGENT
                     }
@@ -120,9 +127,6 @@ fun DiscordLoginScreen(navController: NavController) {
                             val uri = url?.let { runCatching { Uri.parse(it) }.getOrNull() }
                             if (tokenCaptured || uri?.host != "discord.com" || uri.path?.trimEnd('/') != "/app") return
 
-                            // Wait until Discord's app shell has finished loading before reading
-                            // its own-origin storage. Keep the page visible if the token is not
-                            // available yet so the user can recover or retry the login.
                             var attempts = 0
                             val captureTask = object : Runnable {
                                 override fun run() {

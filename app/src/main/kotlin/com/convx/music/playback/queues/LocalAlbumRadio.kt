@@ -11,6 +11,8 @@ import com.music.innertube.models.WatchEndpoint
 import com.convx.music.db.entities.AlbumWithSongs
 import com.convx.music.extensions.toMediaItem
 import com.convx.music.models.MediaMetadata
+import com.convx.music.models.toMediaMetadata
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.withContext
 
@@ -22,12 +24,11 @@ class LocalAlbumRadio(
     @Volatile private var firstTimeLoaded: Boolean = false,
     private var restoredStatus: Queue.Status? = null,
 ) : Queue {
-    override val preloadItem: MediaMetadata? = null
+    override val preloadItem: MediaMetadata?
+        get() = albumWithSongs.songs.getOrNull(startIndex)?.toMediaMetadata()
 
-    private val endpoint: WatchEndpoint
-        get() = WatchEndpoint(
-            playlistId = requireNotNull(playlistId)
-        )
+    private val endpoint: WatchEndpoint?
+        get() = playlistId?.let { WatchEndpoint(playlistId = it) }
 
     override suspend fun getInitialStatus(): Queue.Status {
         restoredStatus?.let {
@@ -55,19 +56,42 @@ class LocalAlbumRadio(
     )
 
     override suspend fun nextPage(): List<MediaItem> = withContext(IO) {
-        if (!firstTimeLoaded) {
-            playlistId = playlistId ?: YouTube.album(albumWithSongs.album.id).getOrThrow().album.playlistId
-            val nextResult = YouTube.next(endpoint, continuation).getOrThrow()
-            continuation = nextResult.continuation
-            firstTimeLoaded = true
-            return@withContext nextResult.items.subList(
-                albumWithSongs.songs.size.coerceAtMost(nextResult.items.size),
-                nextResult.items.size
-            ).map { it.toMediaItem() }
+        try {
+            if (!firstTimeLoaded) {
+                val targetPlaylistId = playlistId ?: YouTube.album(albumWithSongs.album.id).getOrNull()?.album?.playlistId
+                playlistId = targetPlaylistId
+                if (targetPlaylistId != null) {
+                    val ep = WatchEndpoint(playlistId = targetPlaylistId)
+                    val nextResult = YouTube.next(ep, continuation).getOrNull()
+                    if (nextResult != null) {
+                        continuation = nextResult.continuation
+                        firstTimeLoaded = true
+                        val remoteItems = nextResult.items.map { it.toMediaItem() }
+                        return@withContext if (remoteItems.size > albumWithSongs.songs.size) {
+                            remoteItems.subList(
+                                albumWithSongs.songs.size,
+                                remoteItems.size
+                            )
+                        } else emptyList()
+                    }
+                }
+                firstTimeLoaded = true
+                return@withContext emptyList()
+            }
+            val ep = endpoint
+            if (ep != null && continuation != null) {
+                val nextResult = YouTube.next(ep, continuation).getOrNull()
+                if (nextResult != null) {
+                    continuation = nextResult.continuation
+                    return@withContext nextResult.items.map { it.toMediaItem() }
+                }
+            }
+            emptyList()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyList()
         }
-        val nextResult = YouTube.next(endpoint, continuation).getOrThrow()
-        continuation = nextResult.continuation
-        nextResult.items.map { it.toMediaItem() }
     }
 
     data class QueueState(

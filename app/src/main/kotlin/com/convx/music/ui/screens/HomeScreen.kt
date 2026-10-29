@@ -25,6 +25,8 @@ import com.composables.sfsymbols.monochrome.SFSquareStack
 import com.composables.sfsymbols.monochrome.SFMusicMicrophone
 import com.composables.sfsymbols.monochrome.SFEllipsis
 import com.convx.music.ui.utils.sharedArtworkSource
+import kotlinx.coroutines.flow.distinctUntilChanged
+import com.convx.music.utils.isDevotionalItem
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
@@ -413,6 +415,7 @@ fun HomeScreen(
             val last = info.visibleItemsInfo.lastOrNull()?.index ?: return@snapshotFlow null
             homeContinuation.takeIf { last >= info.totalItemsCount - 3 }
         }
+            .distinctUntilChanged()
             .collect(viewModel::loadMoreYouTubeItems)
     }
 
@@ -480,10 +483,13 @@ fun HomeScreen(
     val newReleaseViewModel: NewReleaseViewModel = hiltViewModel()
     val newReleaseAlbums by newReleaseViewModel.newReleaseAlbums.collectAsStateWithLifecycle()
     val topPicks = remember(chartsPage) {
-        chartsPage?.sections?.firstOrNull { it.chartType == ChartType.TOP }?.items.orEmpty()
+        chartsPage?.sections?.firstOrNull { it.chartType == ChartType.TOP }?.items.orEmpty().filterNot { isDevotionalItem(it) }
     }
     val trending = remember(chartsPage) {
-        chartsPage?.sections?.firstOrNull { it.chartType == ChartType.TRENDING }?.items.orEmpty()
+        chartsPage?.sections?.firstOrNull { it.chartType == ChartType.TRENDING }?.items.orEmpty().filterNot { isDevotionalItem(it) }
+    }
+    val cleanNewReleaseAlbums = remember(newReleaseAlbums) {
+        newReleaseAlbums.filterNot { isDevotionalItem(it) }
     }
     val topPicksTitle = stringResource(R.string.top_picks_for_you)
     val newReleaseTitle = stringResource(R.string.new_release_albums)
@@ -589,7 +595,7 @@ fun HomeScreen(
 
                     item(key = "home_feed_filters", contentType = "home_feed_filters") {
                         HomeFeedFilterRow(
-                            moodChips = if (showMoodFilters) homePage?.chips.orEmpty().filter { it.endpoint?.browseId?.isNotBlank() == true } else emptyList(),
+                            moodChips = if (showMoodFilters) homePage?.chips.orEmpty().filter { it.endpoint != null } else emptyList(),
                             selectedChip = shownChip,
                             onSelected = viewModel::toggleChip,
                             scrollState = filterScrollState,
@@ -672,9 +678,9 @@ fun HomeScreen(
                             deps = deps,
                             mediaMetadata = mediaMetadataState,
                             isPlaying = isPlayingState,
-                            topPicks = topPicks.ifEmpty { trending }.ifEmpty { newReleaseAlbums },
+                            topPicks = topPicks.ifEmpty { trending }.ifEmpty { cleanNewReleaseAlbums },
                             topPicksTitle = topPicksTitle,
-                            newReleaseAlbums = if (topPicks.isNotEmpty() || trending.isNotEmpty()) newReleaseAlbums else emptyList(),
+                            newReleaseAlbums = if (topPicks.isNotEmpty() || trending.isNotEmpty()) cleanNewReleaseAlbums else emptyList(),
                             newReleaseTitle = newReleaseTitle,
                             trending = if (topPicks.isNotEmpty()) trending else emptyList(),
                             trendingTitle = trendingTitle,

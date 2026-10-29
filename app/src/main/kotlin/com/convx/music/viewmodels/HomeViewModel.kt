@@ -49,6 +49,8 @@ import com.convx.music.models.SimilarRecommendation
 import com.convx.music.ui.screens.wrapped.WrappedAudioService
 import com.convx.music.ui.screens.wrapped.WrappedManager
 import com.convx.music.utils.SyncUtils
+import com.convx.music.utils.isDevotionalItem
+import com.convx.music.utils.isDevotionalText
 import com.convx.music.utils.dataStore
 import com.convx.music.utils.get
 import com.convx.music.utils.reportException
@@ -160,34 +162,7 @@ private fun isCommunityPlaylist(playlist: PlaylistItem): Boolean =
         !playlist.id.startsWith("OLAK")
 
 
-private val DEVOTIONAL_FILTER_REGEX = Regex(
-    "(?i)\\b(bhajan|bhakt|bhakti|aarti|arti|chalisa|mantra|stotram|stuti|katha|shabad|kirtan|devotional|sanskrit|dhun|pravachan|satsang|anand\\s+sahib|shriram|shri\\s+ram|ram\\s+bhajan|baba\\s+ramdev|shirdi|sai\\s+baba|hanuman\\s+chalisa|ganesh\\s+aarti|shiv\\s+bhajan|krishna\\s+bhajan|waheguru|satnam|guru\\s+nanak|mata\\s+ke\\s+bhetein|jagran|japji\\s+sahib|sukhamani\\s+sahib|paath|rehras|ardas|vedic|shloka|sloka|chalisas|stotras|amritwani|jai\\s+shri\\s+ram|har\\s+har\\s+mahadev|mahadev\\s+bhajan|radha\\s+krishna\\s+bhajan|bhagwat|geeta\\s+updesh|bhajan\\s+kirtan|bhole\\s+baba)\\b"
-)
 
-private fun isDevotionalText(text: String?): Boolean {
-    if (text.isNullOrBlank()) return false
-    return DEVOTIONAL_FILTER_REGEX.containsMatchIn(text)
-}
-
-private fun isDevotionalItem(item: YTItem): Boolean {
-    if (isDevotionalText(item.title)) return true
-    when (item) {
-        is SongItem -> {
-            if (item.artists.any { isDevotionalText(it.name) }) return true
-            val album = item.album
-            if (album != null && isDevotionalText(album.name)) return true
-        }
-        is AlbumItem -> {
-            if (item.artists?.any { isDevotionalText(it.name) } == true) return true
-        }
-        is PlaylistItem -> {
-            val author = item.author
-            if (author != null && isDevotionalText(author.name)) return true
-        }
-        else -> {}
-    }
-    return false
-}
 
 private fun List<YTItem>.filterRecommendationItems(
     hideExplicit: Boolean,
@@ -820,8 +795,6 @@ class HomeViewModel @Inject constructor(
         hideVideoSongs: Boolean,
         hideYoutubeShorts: Boolean,
     ): List<YTItem> {
-        if (!hideExplicit && !hideVideoSongs && !hideYoutubeShorts) return items
-
         return items.filter { item ->
             !isDevotionalItem(item) &&
                 (!hideExplicit || !item.explicit) &&
@@ -891,7 +864,7 @@ class HomeViewModel @Inject constructor(
     }
 
     fun toggleChip(chip: HomePage.Chip?) {
-        if (chip != null && (chip.endpoint?.browseId.isNullOrBlank())) return
+        if (chip != null && chip.endpoint == null) return
         chipJob?.cancel()
         val wasPending = chip != null && chip == pendingChip.value
         pendingChip.value = null
@@ -917,12 +890,13 @@ class HomeViewModel @Inject constructor(
                 val hideExplicit = context.dataStore.get(HideExplicitKey, false)
                 val hideVideoSongs = context.dataStore.get(HideVideoSongsKey, false) || context.dataStore.get(DataSaverEnabledKey, false)
                 val hideYoutubeShorts = context.dataStore.get(HideYoutubeShortsKey, false)
+                val targetBrowseId = chip.endpoint?.browseId?.ifBlank { null } ?: "FEmusic_home"
                 // A flaky request used to leave the chip looking untouched; try again before giving up.
                 var page: HomePage? = null
                 for (attempt in 0..2) {
                     page = YouTube.home(
                         params = chip.endpoint?.params,
-                        browseId = chip.endpoint?.browseId ?: return@launch,
+                        browseId = targetBrowseId,
                     ).getOrNull()
                     if (page != null) break
                     kotlinx.coroutines.delay(400L * (attempt + 1))

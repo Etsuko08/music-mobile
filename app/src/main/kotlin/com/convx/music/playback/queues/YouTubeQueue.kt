@@ -38,11 +38,14 @@ class YouTubeQueue(
                     endpoint = nextResult.endpoint
                     continuation = nextResult.continuation
                     retryCount = 0
-                    return@withContext Queue.Status(
-                        title = nextResult.title,
-                        items = nextResult.items.map { it.toMediaItem() },
-                        mediaItemIndex = nextResult.currentIndex ?: 0,
-                    )
+                    val items = nextResult.items.map { it.toMediaItem() }
+                    if (items.isNotEmpty()) {
+                        return@withContext Queue.Status(
+                            title = nextResult.title,
+                            items = items,
+                            mediaItemIndex = nextResult.currentIndex ?: 0,
+                        )
+                    }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -52,9 +55,22 @@ class YouTubeQueue(
                             videoId = endpoint.videoId,
                             playlistId = "RDAMVM${endpoint.videoId}"
                         )
+                    } else if (attempt == 1 && endpoint.videoId != null && endpoint.playlistId != null) {
+                        // If automix/playlist fails, fall back to pure videoId
+                        endpoint = WatchEndpoint(videoId = endpoint.videoId)
                     }
                 }
             }
+
+            // Guaranteed playback fallback: If queue pagination/automix fails, start the preload item immediately!
+            preloadItem?.let { item ->
+                return@withContext Queue.Status(
+                    title = item.title,
+                    items = listOf(item.toMediaItem()),
+                    mediaItemIndex = 0,
+                )
+            }
+
             throw lastException ?: Exception("Failed to get initial status")
         }
     }
@@ -65,8 +81,7 @@ class YouTubeQueue(
 
     override suspend fun nextPage(): List<MediaItem> {
         return withContext(IO) {
-            var lastException: Throwable? = null
-            val pageContinuation = continuation
+            val pageContinuation = continuation ?: return@withContext emptyList()
             
             for (attempt in 0..maxRetries) {
                 try {
@@ -78,14 +93,14 @@ class YouTubeQueue(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    lastException = e
                     retryCount++
                     if (retryCount >= maxRetries) {
                         continuation = null
                     }
                 }
             }
-            throw lastException ?: Exception("Failed to get next page")
+            continuation = null
+            return@withContext emptyList()
         }
     }
 

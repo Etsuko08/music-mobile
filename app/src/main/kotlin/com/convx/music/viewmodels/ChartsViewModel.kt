@@ -7,6 +7,8 @@ package com.convx.music.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.convx.music.utils.isDevotionalItem
+import com.convx.music.utils.isDevotionalText
 import com.music.innertube.YouTube
 import com.music.innertube.pages.ChartsPage
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -27,6 +29,15 @@ class ChartsViewModel @Inject constructor() : ViewModel() {
     private val _error = MutableStateFlow<String?>(null)
     val error = _error.asStateFlow()
 
+    private fun filterCharts(page: ChartsPage): ChartsPage {
+        val filteredSections = page.sections.mapNotNull { section ->
+            if (isDevotionalText(section.title)) return@mapNotNull null
+            val cleanItems = section.items.filterNot { isDevotionalItem(it) }
+            if (cleanItems.isEmpty()) null else section.copy(items = cleanItems)
+        }
+        return page.copy(sections = filteredSections)
+    }
+
     // IO, not Main: Ktor decodes the (large) charts JSON on the calling dispatcher,
     // which froze the UI past the ANR limit on cold start.
     fun loadCharts() {
@@ -36,7 +47,7 @@ class ChartsViewModel @Inject constructor() : ViewModel() {
             
             YouTube.getChartsPage()
                 .onSuccess { page ->
-                    _chartsPage.value = page
+                    _chartsPage.value = filterCharts(page)
                 }
                 .onFailure { e ->
                     _error.value = "Failed to load charts: ${e.message}"
@@ -52,8 +63,9 @@ class ChartsViewModel @Inject constructor() : ViewModel() {
                 _isLoading.value = true
                 YouTube.getChartsPage(continuation)
                     .onSuccess { newPage ->
+                        val filteredNew = filterCharts(newPage)
                         _chartsPage.value = _chartsPage.value?.copy(
-                            sections = _chartsPage.value?.sections.orEmpty() + newPage.sections,
+                            sections = _chartsPage.value?.sections.orEmpty() + filteredNew.sections,
                             continuation = newPage.continuation
                         )
                     }

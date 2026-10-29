@@ -123,18 +123,13 @@ fun <T> ChipsRow(
         chips.forEachIndexed { index, (value, label) ->
             val isSelected = currentValue == value
 
-            val cornerRadius by animateDpAsState(
-                // Selected chips expand into a full pill.
-                targetValue = if (isSelected) 100.dp else 8.dp,
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = Spring.StiffnessMedium
-                ),
-                label = "corner_radius"
-            )
-
             FilterChip(
-                label = { Text(label) },
+                label = {
+                    Text(
+                        text = label,
+                        fontWeight = if (isSelected) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Medium,
+                    )
+                },
                 selected = isSelected,
                 colors = FilterChipDefaults.filterChipColors(
                     containerColor = effectiveContainerColor,
@@ -143,8 +138,8 @@ fun <T> ChipsRow(
                     selectedLabelColor = effectiveSelectedLabelColor,
                 ),
                 onClick = { onValueUpdate(value) },
-                shape = RoundedCornerShape(cornerRadius),
-                border = pillBorder,
+                shape = RoundedCornerShape(100.dp),
+                border = if (isSelected) null else pillBorder,
                 modifier = Modifier.animateContentSize(
                     animationSpec = spring(
                         dampingRatio = Spring.DampingRatioMediumBouncy,

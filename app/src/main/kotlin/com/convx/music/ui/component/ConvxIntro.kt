@@ -7,13 +7,14 @@ package com.convx.music.ui.component
 
 import android.provider.Settings
 import android.view.HapticFeedbackConstants
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -40,16 +41,33 @@ import kotlin.math.hypot
 import kotlin.math.pow
 import kotlin.math.sin
 
+private const val TOTAL_MS = 1200f
+private const val ZOOM_START = 720f
+private const val ZOOM_END = 1100f
+private const val REVEAL_START = 1000f
+private const val RIPPLE_MS = 450f
+private const val PULSE_MS = 180f
+
+private val BEATS_MS = listOf(400f, 620f)
+
+private fun phase(t: Float, start: Float, end: Float) = ((t - start) / (end - start)).coerceIn(0f, 1f)
+private fun inCubic(x: Float) = x * x * x
+private fun outCubic(x: Float): Float { val f = 1f - x; return 1f - f * f * f }
+private fun outBack(x: Float): Float {
+    val c1 = 1.70158f; val c3 = c1 + 1f
+    val f = x - 1f
+    return 1f + c3 * f * f * f + c1 * f * f
+}
+private fun pulse(dt: Float): Float {
+    if (dt !in 0f..PULSE_MS) return 0f
+    return sin(dt / PULSE_MS * PI.toFloat())
+}
+
 /**
- * Cold-start intro, drawn over the already-composed app: a white disc springs in carrying the
- * black monogram, beats twice (with ripples and a haptic tick each), then zooms through the
- * camera -- the monogram outgrowing the disc for a layered tunnel -- and a hole opens from the
- * centre onto the live app underneath. One clock drives every layer, so it holds the display's
- * refresh rate with no per-phase animation state.
- *
- * The clock advances per frame, capped at [MAX_STEP_MS]: it runs while the app is still starting
- * up, and a wall-clock tween would skip the whole intro across one startup stall. A stall pauses
- * it instead. Skipped outright when the system animator scale is 0 (reduced motion).
+ * Butter-smooth 120Hz cold-start intro for Etsuko:
+ * Driven by an Animatable running on the display frame rate.
+ * Renders the official Etsuko split-disc logo in Bone white over Ink background,
+ * pulses with tactile haptic beats, and sweeps into the live app.
  */
 @Composable
 fun ConvxIntro(onFinished: () -> Unit) {
@@ -58,29 +76,26 @@ fun ConvxIntro(onFinished: () -> Unit) {
     val reducedMotion = remember {
         Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
     }
-    val clock = remember { mutableFloatStateOf(0f) }
+    val clock = remember { Animatable(0f) }
+
     LaunchedEffect(Unit) {
         if (!reducedMotion) {
-            var last = withFrameNanos { it }
-            while (clock.floatValue < TOTAL_MS) {
-                val now = withFrameNanos { it }
-                val before = clock.floatValue
-                val after = (before + ((now - last) / 1e6f).coerceAtMost(MAX_STEP_MS)).coerceAtMost(TOTAL_MS)
-                last = now
-                clock.floatValue = after
-                if (BEATS_MS.any { it in before..after && it != before }) {
+            var lastTickMs = 0f
+            clock.animateTo(
+                targetValue = TOTAL_MS,
+                animationSpec = tween(durationMillis = TOTAL_MS.toInt(), easing = LinearEasing),
+            ) {
+                val current = value
+                if (BEATS_MS.any { it in lastTickMs..current && it != lastTickMs }) {
                     view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                 }
+                lastTickMs = current
             }
         }
         onFinished()
     }
     if (reducedMotion) return
 
-    // The monogram as a raw path in its 24x24 viewport, drawn under a canvas scale. A
-    // VectorPainter caches a bitmap at its draw size, and this glyph changes size every
-    // frame (up to ~17x in the zoom) -- that re-rasterised into a fresh, eventually
-    // multi-megapixel bitmap per frame, which is what made the intro stutter.
     val logoVector = ImageVector.vectorResource(R.drawable.convx_logo)
     val logo = remember(logoVector) {
         Path().apply {
@@ -90,83 +105,55 @@ fun ConvxIntro(onFinished: () -> Unit) {
     }
     val logoViewport = logoVector.viewportWidth
     val hole = remember { Path() }
+
+    val inkColor = Color(0xFF0E0E10)
+    val boneColor = Color(0xFFF3F0E9)
+
     Canvas(
         Modifier
             .fillMaxSize()
-            // Swallow touches until the app is revealed.
             .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } } },
     ) {
-        val t = clock.floatValue
+        val t = clock.value
         val c = center
-        val r0 = 52.dp.toPx()
+        val r0 = 54.dp.toPx()
         val cover = hypot(size.width, size.height) / 2f * 1.05f
 
-        // The reveal is a hole clipped out of everything below, so the app shows through
-        // without a full-screen offscreen layer and BlendMode.Clear.
         val holeR = cover * outCubic(phase(t, REVEAL_START, TOTAL_MS))
         hole.reset()
         if (holeR > 0f) hole.addOval(Rect(c, holeR))
         clipPath(hole, ClipOp.Difference) {
-            drawRect(Color.Black)
+            drawRect(inkColor)
 
-            // Ripples, under the disc.
             BEATS_MS.forEach { beat ->
                 val x = (t - beat) / RIPPLE_MS
                 if (x in 0f..1f) {
                     drawCircle(
-                        color = Color.White.copy(alpha = 0.45f * (1f - x)),
-                        radius = r0 * (1f + 2.4f * outCubic(x)),
+                        color = boneColor.copy(alpha = 0.5f * (1f - x)),
+                        radius = r0 * (1f + 2.2f * outCubic(x)),
                         center = c,
-                        style = Stroke(width = 2.dp.toPx() * (1f - 0.6f * x)),
+                        style = Stroke(width = 2.5.dp.toPx() * (1f - 0.6f * x)),
                     )
                 }
             }
 
             val beat = BEATS_MS.sumOf { pulse(t - it).toDouble() }.toFloat()
             val zoom = inCubic(phase(t, ZOOM_START, ZOOM_END))
-            val discIn = outBack(phase(t, 0f, 450f))
-            val discR = r0 * discIn * (1f + 0.09f * beat) + (cover - r0) * zoom
-            drawCircle(Color.White, radius = discR.coerceAtLeast(0f), center = c)
+            val discIn = outBack(phase(t, 0f, 350f))
+            val discR = r0 * discIn * (1f + 0.08f * beat) + (cover - r0) * zoom
+            drawCircle(boneColor, radius = discR.coerceAtLeast(0f), center = c)
 
-            val glyphIn = phase(t, 100f, 550f)
-            // Grows faster than the disc while zooming, so black strokes sweep past the camera.
-            val glyph = r0 * 2f * 0.64f * outBack(glyphIn) * (1f + 0.09f * beat) *
-                (1f + 16f * zoom.pow(1.6f))
-            val spin = -140f * (1f - outCubic(glyphIn)) + 35f * zoom
+            val glyphIn = phase(t, 80f, 420f)
+            val glyph = r0 * 2f * 0.62f * outBack(glyphIn) * (1f + 0.08f * beat) *
+                (1f + 15f * zoom.pow(1.6f))
+            val spin = -120f * (1f - outCubic(glyphIn)) + 30f * zoom
             if (glyph > 0f) {
                 rotate(spin, pivot = c) {
                     translate(c.x - glyph / 2f, c.y - glyph / 2f) {
-                        scale(glyph / logoViewport, pivot = Offset.Zero) { drawPath(logo, Color.Black) }
+                        scale(glyph / logoViewport, pivot = Offset.Zero) { drawPath(logo, inkColor) }
                     }
                 }
             }
         }
     }
-}
-
-private const val TOTAL_MS = 1700f
-private const val ZOOM_START = 1000f
-private const val ZOOM_END = 1480f
-private const val REVEAL_START = 1400f
-private const val RIPPLE_MS = 600f
-private const val PULSE_MS = 220f
-
-/** Most the clock advances per frame (~two 60 Hz frames), so stalls pause rather than skip. */
-private const val MAX_STEP_MS = 34f
-
-/** Two eighth notes at 120 BPM: a "da-dum". */
-private val BEATS_MS = listOf(600f, 850f)
-
-private fun phase(t: Float, start: Float, end: Float) = ((t - start) / (end - start)).coerceIn(0f, 1f)
-
-private fun pulse(dt: Float) = if (dt in 0f..PULSE_MS) sin(PI.toFloat() * dt / PULSE_MS) else 0f
-
-private fun outCubic(x: Float) = 1f - (1f - x).pow(3)
-
-private fun inCubic(x: Float) = x * x * x
-
-private fun outBack(x: Float): Float {
-    val c1 = 1.70158f
-    val c3 = c1 + 1f
-    return 1f + c3 * (x - 1f).pow(3) + c1 * (x - 1f).pow(2)
 }

@@ -201,7 +201,7 @@ class MainActivity : ComponentActivity() {
 
         // Cold launch from the launcher only (WelcomeActivity hands off with this extra);
         // notification/deep-link opens go straight to the app.
-        val playIntro = false
+        val playIntro = savedInstanceState == null && intent.getBooleanExtra(EXTRA_PLAY_INTRO, true)
         setContent {
             var showIntro by rememberSaveable { mutableStateOf(playIntro) }
             Box(Modifier.fillMaxSize()) {

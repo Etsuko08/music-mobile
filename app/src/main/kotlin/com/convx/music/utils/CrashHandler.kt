@@ -64,7 +64,7 @@ class CrashHandler private constructor(
         }.toString()
 
         return buildString {
-            appendLine("Convx Crash Report")
+            appendLine("Etsuko Crash Report")
             appendLine("=".repeat(50))
             appendLine()
             appendLine("Manufacturer: ${Build.MANUFACTURER}")

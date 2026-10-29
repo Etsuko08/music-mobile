@@ -15,6 +15,7 @@ import com.convx.music.constants.HideExplicitKey
 import com.convx.music.db.MusicDatabase
 import com.convx.music.utils.dataStore
 import com.convx.music.utils.get
+import com.convx.music.utils.isDevotionalItem
 import com.convx.music.utils.reportException
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -63,6 +64,7 @@ constructor(
                         }
 
                         albums
+                            .filterNot { isDevotionalItem(it) }
                             .map { album ->
                                 val rank = album.artists.orEmpty().firstNotNullOfOrNull { artist ->
                                     artist.id?.let { artistId ->

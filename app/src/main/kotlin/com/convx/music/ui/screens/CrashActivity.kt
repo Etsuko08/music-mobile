@@ -101,7 +101,7 @@ class CrashActivity : ComponentActivity() {
         lifecycleScope.launch {
             try {
                 val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-                val fileName = "convx_crash_$timestamp.txt"
+                val fileName = "etsuko_crash_$timestamp.txt"
                 val crashFile = withContext(Dispatchers.IO) {
                     File(cacheDir, fileName).also { it.writeText(crashLog) }
                 }
