@@ -206,8 +206,15 @@ fun ChangelogScreen(
                             if (apiConn.responseCode == 200) {
                                 val releaseJson = apiConn.inputStream.bufferedReader().use { it.readText() }
                                 val releaseObj = JSONObject(releaseJson)
-                                val body = releaseObj.optString("body", "Release $tag")
+                                val rawBody = releaseObj.optString("body", "Release $tag")
+                                val body = rawBody
+                                    .replace(Regex("(?i)\\bconvx\\b"), "Etsuko")
+                                    .replace("2.0.4-nightly", "1.7.5")
+                                    .replace("2.0.4", "1.7.5")
                                 val desc = releaseObj.optString("name", tag)
+                                    .replace(Regex("(?i)\\bconvx\\b"), "Etsuko")
+                                    .replace("2.0.4-nightly", "1.7.5")
+                                    .replace("2.0.4", "1.7.5")
                                 val lines = body.lines().filter { it.isNotBlank() }
                                 val sections = listOf(ChangelogSection("What's New in $tag", lines))
                                 saveChangelogToCache(context, tag, sections, null, desc, null)

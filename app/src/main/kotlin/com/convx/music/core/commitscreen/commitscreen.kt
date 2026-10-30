@@ -122,7 +122,11 @@ fun CommitScreen(
                     val commitObj = obj.getJSONObject("commit")
                     val fullMessage = commitObj.getString("message")
                     // Take only the first line (subject) of the commit message
-                    val message = fullMessage.lines().firstOrNull { it.isNotBlank() } ?: fullMessage
+                    val rawLine = fullMessage.lines().firstOrNull { it.isNotBlank() } ?: fullMessage
+                    val message = rawLine
+                        .replace(Regex("(?i)\\bconvx\\b"), "Etsuko")
+                        .replace("2.0.4-nightly", "1.7.5")
+                        .replace("2.0.4", "1.7.5")
 
                     val authorObj = commitObj.getJSONObject("author")
                     val authorName = authorObj.optString("name", "Unknown")
