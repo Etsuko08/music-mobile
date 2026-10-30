@@ -79,7 +79,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="v1.7.8"
+          TAG="v1.7.9"
           APK_PATH=$(find app/build/outputs/apk -name '*.apk' | head -n 1)
           if [ -n "$APK_PATH" ]; then
             cp "$APK_PATH" "etsuko-mobile.apk"
@@ -87,10 +87,10 @@ jobs:
             APK_SIZE_MB=$((APK_SIZE / 1048576))
             echo "APK: $APK_PATH ($APK_SIZE_MB MB)"
 
-            NOTES="Etsuko Mobile v1.7.8 - Default High Fidelity Audio: audio quality defaults to High across service, player, downloads, and bottom sheet (160kbps/256kbps pristine streaming) so all songs play instantly without manual quality toggling."
+            NOTES="Etsuko Mobile v1.7.9 - Resilient Playback and Seek Engine: eliminates mid-track audio stalls and seek freezes on Xiaomi/HyperOS tablets and mobile networks. ChunkedDataSource now auto-reconnects on socket disconnects without false EOF, OkHttpClient auto-retries on connection drops with active connection pooling, DefaultLoadControl retains a 30s back buffer, and high-performance WifiLock stays held during buffering and playback."
             gh release create "$TAG" "etsuko-mobile.apk" \
               --repo "${{ github.repository }}" \
-              --title "Etsuko Mobile v1.7.8" \
+              --title "Etsuko Mobile v1.7.9" \
               --notes "$NOTES" \
               || gh release upload "$TAG" "etsuko-mobile.apk" --repo "${{ github.repository }}" --clobber
           else

@@ -1,9 +1,9 @@
-# Etsuko Mobile — Master Development Chronicle & Architecture Encyclopedia (v1.0.0 – v1.7.8)
+# Etsuko Mobile — Master Development Chronicle & Architecture Encyclopedia (v1.0.0 – v1.7.9)
 
 > [!IMPORTANT]
 > **MANDATORY DIRECTIVE FOR ALL FUTURE SESSIONS:**  
 > Before modifying, compiling, or refactoring ANY code in this repository, **YOU MUST READ THIS ENTIRE DOCUMENT FIRST**.  
-> This file records every user order, bug encounter, architectural failure, technical root cause, and permanent solution from `v1.0.0` through `v1.7.8`.
+> This file records every user order, bug encounter, architectural failure, technical root cause, and permanent solution from `v1.0.0` through `v1.7.9`.
 
 ---
 
@@ -235,6 +235,41 @@
 
 ---
 
+---
+
+### Order 21 (Step 134): Mid-Track Freezes & Far Seek Stalls on Xiaomi/Tablets (v1.7.9)
+* **User Report:**
+  > *"read md file and we got another problem can u fix root cuse and tell me at last i shared my app to my friend he uses xaiomi tab when he was listening songs he tried 2-3 songs all getting stopped after playing some mints sometimes seconds chnaging another plays and agin stops after some time and also when that user skip lil lil it plays when he skips like half or more it stops songs so fix thier root cuse genuine fix and from this should not another bug or any issue genuine fix u got? goo"*
+* **Technical Root Causes Discovered:**
+  1. **Premature `RESULT_END_OF_INPUT` in `ChunkedDataSource.kt`:**
+     - In `ChunkedDataSource.read()`: `if (read == C.RESULT_END_OF_INPUT) { if (pieceLeft > 0) return C.RESULT_END_OF_INPUT ... }`.
+     - Whenever YouTube CDN closed an idle keep-alive socket or a Wi-Fi jitter/socket reset occurred while `pieceLeft > 0`, `ChunkedDataSource` immediately returned `C.RESULT_END_OF_INPUT` to ExoPlayer.
+     - ExoPlayer interpreted `RESULT_END_OF_INPUT` as the natural End-of-File of the song, immediately entering `STATE_ENDED` and stopping playback silently without retrying!
+  2. **Far-Seek ("Half or More") Stalls:**
+     - Skips of 5-10s ("lil lil") succeeded because the audio samples were already buffered in memory within ExoPlayer's 50-second forward buffer (`DefaultLoadControl`).
+     - Skips of "half or more" (beyond the buffer) forced ExoPlayer to flush renderers and open a new Range request. If OkHttp reused an aborted socket from the previous read, `upstream.read()` received premature EOF, which `ChunkedDataSource` turned into `RESULT_END_OF_INPUT`, instantly terminating the seek and halting playback.
+  3. **Xiaomi / MIUI Background Wi-Fi Lock Release During Buffering & Seeking:**
+     - In `MusicService.kt`, `WifiLock` was held only when `player.isPlaying == true`.
+     - During buffering and seeking, `player.isPlaying` is `false`, which immediately triggered `releaseWifiLock()`. On Xiaomi tablets (MIUI / HyperOS), dropping the Wi-Fi lock during seek/buffer allowed the OS battery subsystem to sleep the Wi-Fi chip and terminate the socket mid-stream.
+  4. **OkHttpClient Connection Pool Stagnation:**
+     - `youtubeUpstreamFactory()` lacked `retryOnConnectionFailure(true)` and explicit read/connect timeouts, leaving OkHttp vulnerable to dead socket reuse.
+  5. **No Back-Buffer in `DefaultLoadControl`:**
+     - Back buffer was 0ms. Retaining 30s (`setBackBuffer(30_000, true)`) allows small skips and backward scrubs to operate from RAM.
+* **Fixes Applied in v1.7.9:**
+  - `ChunkedDataSource.kt`:
+    - Added `consecutiveEofRetries` counter with `MAX_CHUNK_RETRIES = 5`.
+    - On mid-chunk EOF or socket disconnect (`read == C.RESULT_END_OF_INPUT` while `pieceLeft > 0`), the connection is closed and automatically reopened from the current advanced `position` instead of returning `RESULT_END_OF_INPUT`.
+    - Catches socket exceptions during `openPiece()` and `upstream.read()` and retries up to 5 times.
+    - Successfully reading bytes resets `consecutiveEofRetries = 0`.
+    - Truly reaching the end of the track (HTTP 416 or remaining == 0) returns `C.RESULT_END_OF_INPUT` cleanly with zero risk of infinite loop.
+  - `MusicService.kt`:
+    - Updated `onEvents` to hold `WifiLock` whenever `player.playWhenReady` is true and state is `STATE_READY` or `STATE_BUFFERING`, preventing Wi-Fi sleeps on Xiaomi/MIUI tablets during seeks and network buffering.
+    - Added `retryOnConnectionFailure(true)`, 15s connect timeout, 20s read timeout, and active `ConnectionPool(8, 30, TimeUnit.SECONDS)` to `OkHttpClient`.
+    - Added `.setBackBuffer(30_000, true)` to `DefaultLoadControl`.
+  - Bumped version to `v1.7.9` across `version.properties` and `.github/workflows/build.yml`.
+
+---
+
 ## 3. Comprehensive File Inventory & Golden Rules
 
 ```
@@ -267,8 +302,8 @@ app/
 │       └── mipmap-xxxhdpi/
 │           ├── ic_launcher_foreground.png
 │           └── ic_launcher_*_fg.webp     <-- 13 tinted split-disc theme options
-.github/workflows/build.yml              <-- ARM64 GMS release pipeline & v1.7.8 publisher
-version.properties                       <-- VERSION_MAJOR=1, MINOR=7, PATCH=8
+.github/workflows/build.yml              <-- ARM64 GMS release pipeline & v1.7.9 publisher
+version.properties                       <-- VERSION_MAJOR=1, MINOR=7, PATCH=9
 ```
 
 ### The 5 Golden Rules for Future Development

@@ -1407,6 +1407,7 @@ class MusicService :
                         750,      // Buffer for playback: 750ms — start audio as soon as we have it
                         2_000     // Buffer for playback after re-buffer: 2s
                     )
+                    .setBackBuffer(30_000, true)
                     .build()
             )
             .setHandleAudioBecomingNoisy(true)
@@ -2838,10 +2839,12 @@ class MusicService :
             currentMediaMetadata.value = player.currentMetadata
         }
 
-        if (events.containsAny(Player.EVENT_IS_PLAYING_CHANGED)) {
+        if (events.containsAny(Player.EVENT_IS_PLAYING_CHANGED, Player.EVENT_PLAYBACK_STATE_CHANGED, Player.EVENT_PLAY_WHEN_READY_CHANGED)) {
             notificationUpdater.updateWidgetUI(player.isPlaying)
             notificationUpdater.restartWidgetProgressTicker()
-            if (player.isPlaying) {
+            val shouldHoldWifi = player.playWhenReady &&
+                (player.playbackState == Player.STATE_READY || player.playbackState == Player.STATE_BUFFERING)
+            if (shouldHoldWifi) {
                 audioResources.acquireWifiLock()
             } else {
                 audioResources.releaseWifiLock()
@@ -3209,6 +3212,10 @@ class MusicService :
                 ChunkedDataSource.Factory(OkHttpDataSource.Factory(
                     OkHttpClient
                         .Builder()
+                        .retryOnConnectionFailure(true)
+                        .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                        .readTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+                        .connectionPool(okhttp3.ConnectionPool(8, 30, java.util.concurrent.TimeUnit.SECONDS))
                         .dns(object : Dns {
                             override fun lookup(hostname: String): List<InetAddress> {
                                 val addresses = Dns.SYSTEM.lookup(hostname)
