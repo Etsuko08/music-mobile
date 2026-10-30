@@ -9,8 +9,7 @@ internal fun rankedAudioFormats(
     metered: Boolean,
     preferAac: Boolean,
 ): List<Format> {
-    // Default to high quality unless user explicitly requests LOW quality
-    val highQuality = quality != AudioQuality.LOW
+    val highQuality = quality == AudioQuality.HIGH || (quality == AudioQuality.AUTO && !metered)
     return formats.filter {
         it.isAudio && (!preferAac || it.mimeType.contains("mp4", true) || it.mimeType.contains("aac", true))
     }.sortedWith(

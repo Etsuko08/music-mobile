@@ -209,12 +209,12 @@ fun ChangelogScreen(
                                 val rawBody = releaseObj.optString("body", "Release $tag")
                                 val body = rawBody
                                     .replace(Regex("(?i)\\bconvx\\b"), "Etsuko")
-                                    .replace("2.0.4-nightly", "1.7.5")
-                                    .replace("2.0.4", "1.7.5")
+                                    .replace("2.0.4-nightly", tag.removePrefix("v"))
+                                    .replace("2.0.4", tag.removePrefix("v"))
                                 val desc = releaseObj.optString("name", tag)
                                     .replace(Regex("(?i)\\bconvx\\b"), "Etsuko")
-                                    .replace("2.0.4-nightly", "1.7.5")
-                                    .replace("2.0.4", "1.7.5")
+                                    .replace("2.0.4-nightly", tag.removePrefix("v"))
+                                    .replace("2.0.4", tag.removePrefix("v"))
                                 val lines = body.lines().filter { it.isNotBlank() }
                                 val sections = listOf(ChangelogSection("What's New in $tag", lines))
                                 saveChangelogToCache(context, tag, sections, null, desc, null)

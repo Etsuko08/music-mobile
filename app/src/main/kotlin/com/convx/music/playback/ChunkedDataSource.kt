@@ -78,13 +78,6 @@ class ChunkedDataSource(private val upstream: DataSource) : DataSource {
             }
             val read = upstream.read(buffer, offset, minOf(length.toLong(), pieceLeft).toInt())
             if (read == C.RESULT_END_OF_INPUT) {
-                if (pieceLeft > 0 && (remaining == C.LENGTH_UNSET.toLong() || remaining > 0)) {
-                    // Stalled connection dropped before full chunk was read - reconnect and continue
-                    upstream.close()
-                    opened = false
-                    pieceLeft = 0
-                    continue
-                }
                 if (pieceLeft > 0) return C.RESULT_END_OF_INPUT
                 upstream.close()
                 opened = false
@@ -117,7 +110,7 @@ class ChunkedDataSource(private val upstream: DataSource) : DataSource {
     }
 
     private companion object {
-        const val CHUNK_BYTES = 2L * 1024 * 1024
+        const val CHUNK_BYTES = 512L * 1024
     }
 }
 

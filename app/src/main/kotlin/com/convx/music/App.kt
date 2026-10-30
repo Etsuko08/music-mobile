@@ -185,7 +185,9 @@ class App : Application(), SingletonImageLoader.Factory {
         val languageTag = locale.language
 
         YouTube.locale = YouTubeLocale(
-            gl = settings[ContentCountryKey]?.takeIf { it != SYSTEM_DEFAULT } ?: "US",
+            gl = settings[ContentCountryKey]?.takeIf { it != SYSTEM_DEFAULT }
+                ?: locale.country.takeIf { it in CountryCodeToName }
+                ?: "US",
             hl = settings[ContentLanguageKey]?.takeIf { it != SYSTEM_DEFAULT }
                 ?: locale.language.takeIf { it in LanguageCodeToName }
                 ?: languageTag.takeIf { it in LanguageCodeToName }
@@ -312,7 +314,10 @@ class App : Application(), SingletonImageLoader.Factory {
                         ?: systemLocale
 
                     YouTube.locale = YouTubeLocale(
-                        gl = contentCountry?.takeIf { it != SYSTEM_DEFAULT } ?: "US",
+                        gl = contentCountry?.takeIf { it != SYSTEM_DEFAULT }
+                            ?: effectiveAppLocale.country.takeIf { it in CountryCodeToName }
+                            ?: systemLocale.country.takeIf { it in CountryCodeToName }
+                            ?: "US",
                         hl = contentLanguage?.takeIf { it != SYSTEM_DEFAULT }
                             ?: effectiveAppLocale.toLanguageTag().takeIf { it in LanguageCodeToName }
                             ?: effectiveAppLocale.language.takeIf { it in LanguageCodeToName }
