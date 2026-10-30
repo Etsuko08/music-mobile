@@ -303,13 +303,13 @@ object YTPlayerUtils {
      * and supports more formats when available.
      */
     private val STREAM_FALLBACK_CLIENTS: Array<YouTubeClient> = arrayOf(
+        VISIONOS,
         IOS,
         ANDROID_VR_1_61_48,
         ANDROID_VR_1_65_10,
+        WEB_REMIX,
         TVHTML5_SIMPLY_EMBEDDED_PLAYER,
         TVHTML5,
-        VISIONOS,
-        WEB_REMIX,
         ANDROID_CREATOR,
         IPADOS,
         ANDROID_VR_NO_AUTH,
@@ -534,7 +534,7 @@ object YTPlayerUtils {
                 Timber.tag(TAG).d("TIDAL intercept failed or returned null — trying next source")
             }
 
-            val saavnEnabled = context.dataStore.get(EnableSaavnStreamingKey, true)
+            val saavnEnabled = context.dataStore.get(EnableSaavnStreamingKey, false)
             if (saavnEnabled && !preferAac) {
                 Timber.tag(TAG).d("JioSaavn streaming enabled — trying Saavn for videoId=$videoId")
                 val saavnResult = runCatching {

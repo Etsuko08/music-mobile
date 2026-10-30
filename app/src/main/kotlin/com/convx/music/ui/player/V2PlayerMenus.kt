@@ -209,6 +209,19 @@ fun V2OptionsMenuHost(
     var showGoTo by remember { mutableStateOf(false) }
     var showAddToPlaylist by remember { mutableStateOf(false) }
 
+    androidx.compose.runtime.LaunchedEffect(playerBottomSheetState.isCollapsed) {
+        if (playerBottomSheetState.isCollapsed) {
+            showGoTo = false
+            showAddToPlaylist = false
+        }
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose {
+            showGoTo = false
+            showAddToPlaylist = false
+        }
+    }
+
     if (expanded) {
         V2OptionsMenu(
             isLiked = isLiked,
@@ -225,31 +238,64 @@ fun V2OptionsMenuHost(
                     context.startActivity(android.content.Intent.createChooser(intent, null))
                 }
             },
-            onAddToPlaylist = { showAddToPlaylist = true },
-            onCreateStation = if (mediaMetadata.isLocalFile) null else playerConnection::startRadioSeamlessly,
-            onGoTo = { showGoTo = true },
-            onViewCredits = onViewCredits,
-            onShareLyrics = onShareLyrics,
-            onMore = onMore,
-            onOpenSleepTimer = onOpenSleepTimer,
-            onOpenAudioDevices = onOpenAudioDevices,
+            onAddToPlaylist = {
+                onDismiss()
+                showAddToPlaylist = true
+            },
+            onCreateStation = if (mediaMetadata.isLocalFile) null else {
+                {
+                    onDismiss()
+                    playerConnection.startRadioSeamlessly()
+                }
+            },
+            onGoTo = {
+                onDismiss()
+                showGoTo = true
+            },
+            onViewCredits = {
+                onDismiss()
+                onViewCredits()
+            },
+            onShareLyrics = {
+                onDismiss()
+                onShareLyrics()
+            },
+            onMore = {
+                onDismiss()
+                onMore()
+            },
+            onOpenSleepTimer = {
+                onDismiss()
+                onOpenSleepTimer()
+            },
+            onOpenAudioDevices = {
+                onDismiss()
+                onOpenAudioDevices()
+            },
         )
     }
     if (showGoTo) {
         V2GoToMenu(
             albumTitle = mediaMetadata.album?.title,
             artistName = mediaMetadata.artists.firstOrNull()?.name,
-            onDismiss = { showGoTo = false },
+            onDismiss = {
+                showGoTo = false
+                onDismiss()
+            },
             onGoToAlbum = mediaMetadata.album?.let { album ->
                 {
-                    navController.navigate("album/${album.id}")
+                    showGoTo = false
+                    onDismiss()
                     playerBottomSheetState.collapseSoft()
+                    navController.navigate("album/${album.id}")
                 }
             },
             onGoToArtist = mediaMetadata.artists.firstOrNull()?.id?.let { id ->
                 {
-                    navController.navigate("artist/$id")
+                    showGoTo = false
+                    onDismiss()
                     playerBottomSheetState.collapseSoft()
+                    navController.navigate("artist/$id")
                 }
             },
         )

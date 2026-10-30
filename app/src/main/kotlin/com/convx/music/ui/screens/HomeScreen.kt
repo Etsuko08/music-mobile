@@ -522,11 +522,12 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.TopStart
             ) {
-                val pageBackground = rememberAppBackgroundColor(Color(0xFF07080d))
+                val systemBg = com.convx.music.ui.ios.foundation.IosTheme.colors.systemBackground
+                val pageBackground = rememberAppBackgroundColor(systemBg)
                 Box(
                     modifier = Modifier
                         .matchParentSize()
-                        .background(if (hasCustomHomeBackground()) androidx.compose.ui.graphics.Brush.linearGradient(listOf(pageBackground, pageBackground)) else com.convx.music.ui.component.EtsukoHomeGradient)
+                        .background(if (hasCustomHomeBackground()) androidx.compose.ui.graphics.Brush.linearGradient(listOf(pageBackground, pageBackground)) else androidx.compose.ui.graphics.SolidColor(systemBg))
                 )
                 HomeImageBackground(contentLoaded = homePage != null)
                 if (!hasCustomHomeBackground()) {

@@ -772,6 +772,10 @@ private fun PlayerV2Content(
                 }
             }
 
+            PlayerDownloadButton(
+                mediaMetadata = mediaMetadata,
+                tint = adaptivePrimary,
+            )
 
             IconButton(
                 modifier = Modifier.size(40.dp),
@@ -1344,6 +1348,11 @@ private fun PlayerV2Content(
                                                 )
                                             }
                                         }
+
+                                        PlayerDownloadButton(
+                                            mediaMetadata = mediaMetadata,
+                                            tint = adaptivePrimary,
+                                        )
 
                                         IconButton(
                                             modifier = Modifier.size(40.dp),
@@ -2519,3 +2528,74 @@ private fun FadeSwapText(
         )
     }
 }
+
+@Composable
+private fun PlayerDownloadButton(
+    mediaMetadata: com.convx.music.models.MediaMetadata?,
+    tint: androidx.compose.ui.graphics.Color,
+    modifier: Modifier = Modifier,
+) {
+    if (mediaMetadata == null || mediaMetadata.isLocalFile) return
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val database = com.convx.music.LocalDatabase.current.get()
+    val downloadUtil = com.convx.music.LocalDownloadUtil.current.get()
+    val downloadState by androidx.compose.runtime.remember(mediaMetadata.id) {
+        downloadUtil.getDownload(mediaMetadata.id)
+    }.collectAsState(initial = null)
+
+    IconButton(
+        modifier = modifier.size(40.dp),
+        onClick = {
+            val dl = downloadState
+            if (dl?.state == androidx.media3.exoplayer.offline.Download.STATE_COMPLETED) {
+                androidx.media3.exoplayer.offline.DownloadService.sendRemoveDownload(
+                    context,
+                    com.convx.music.playback.ExoDownloadService::class.java,
+                    mediaMetadata.id,
+                    false,
+                )
+            } else if (dl?.state != androidx.media3.exoplayer.offline.Download.STATE_DOWNLOADING &&
+                dl?.state != androidx.media3.exoplayer.offline.Download.STATE_QUEUED) {
+                database.transaction { insert(mediaMetadata) }
+                val downloadRequest = androidx.media3.exoplayer.offline.DownloadRequest
+                    .Builder(mediaMetadata.id, android.net.Uri.parse(mediaMetadata.id))
+                    .setCustomCacheKey(mediaMetadata.id)
+                    .setData(mediaMetadata.title.toByteArray())
+                    .build()
+                androidx.media3.exoplayer.offline.DownloadService.sendAddDownload(
+                    context,
+                    com.convx.music.playback.ExoDownloadService::class.java,
+                    downloadRequest,
+                    false,
+                )
+            }
+        },
+    ) {
+        when (downloadState?.state) {
+            androidx.media3.exoplayer.offline.Download.STATE_COMPLETED -> {
+                Icon(
+                    painter = androidx.compose.ui.res.painterResource(R.drawable.check),
+                    contentDescription = "Downloaded",
+                    tint = tint,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+            androidx.media3.exoplayer.offline.Download.STATE_DOWNLOADING,
+            androidx.media3.exoplayer.offline.Download.STATE_QUEUED -> {
+                com.convx.music.ui.ios.compat.CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = tint,
+                )
+            }
+            else -> {
+                Icon(
+                    painter = androidx.compose.ui.res.painterResource(R.drawable.download),
+                    contentDescription = "Download",
+                    tint = tint,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+        }
+    }
+}
+

@@ -404,7 +404,7 @@ class HomeViewModel @Inject constructor(
             accountImageUrl = flagsPair.first.accountImageUrl,
             showWrappedCard = flagsPair.second,
         )
-    }.stateIn(feedStateScope, SharingStarted.WhileSubscribed(5000), HomeUiState())
+    }.stateIn(feedStateScope, SharingStarted.Lazily, HomeUiState())
 
     fun togglePin(item: YTItem) {
         viewModelScope.launch(Dispatchers.IO) {
