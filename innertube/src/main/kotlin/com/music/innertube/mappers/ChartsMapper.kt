@@ -8,7 +8,6 @@ import com.music.innertube.models.MusicTwoRowItemRenderer
 import com.music.innertube.models.SongItem
 import com.music.innertube.models.YTItem
 import com.music.innertube.models.YouTubeClient.Companion.WEB_REMIX
-import com.music.innertube.models.YouTubeLocale
 import com.music.innertube.models.getContinuation
 import com.music.innertube.models.oddElements
 import com.music.innertube.models.response.BrowseResponse
@@ -22,8 +21,7 @@ internal object ChartsMapper {
             client = WEB_REMIX,
             browseId = "FEmusic_charts",
             params = "ggMGCgQIgAQ%3D",
-            continuation = continuation,
-            customLocale = YouTubeLocale(gl = "US", hl = "en")
+            continuation = continuation
         ).body<BrowseResponse>()
 
         val sections = mutableListOf<ChartsPage.ChartSection>()

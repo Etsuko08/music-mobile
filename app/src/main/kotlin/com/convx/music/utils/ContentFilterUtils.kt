@@ -33,7 +33,24 @@ val DEVOTIONAL_FILTER_REGEX = Regex(
     "namita\\s*agrawal|shahnaz\\s*akhtar|suresh\\s*wadkar|mithu\\s*marshal|pawan\\s*singh\\s*bhakti|khesari\\s*bhakti|" +
     "chhoti\\s*naav|choti\\s*naav|aao\\s*ayodhya|tere\\s*bhavan|maaya\\s*tere\\s*bhavan|adbhut\\s*maaya|" +
     "rame\\s*rame|pavagadh|naadham\\s*en\\s*jeevane|parama\\s*danga|aigiri\\s*nandini|mahishasura|mahishasuramardini|shakti\\s*mix|" +
-    "भजन|आरती|चालीसा|मंत्र|कथा|कीर्तन|राम|शिव|हनुमान|दुर्गा|कृष्ण|छठ|अयोध्या|ਸ਼ਬਦ|ਕੀਰਤਨ|ਅਨੰਦ ਸਾਹਿਬ" +
+    // Devanagari Unicode Keywords
+    "\\u0905\\u092F\\u094B\\u0927\\u094D\\u092F\\u093E|" + // Ayodhya
+    "\\u0930\\u093E\\u092E|" + // Ram
+    "\\u092D\\u091C\\u0928|" + // Bhajan
+    "\\u092D\\u0915\\u094D\\u0924\\u093F|" + // Bhakti
+    "\\u0906\\u0930\\u0924\\u0940|" + // Aarti
+    "\\u091A\\u093E\\u0932\\u0940\\u0938\\u093E|" + // Chalisa
+    "\\u0915\\u0940\\u0930\\u094D\\u0924\\u0928|" + // Kirtan
+    "\\u0939\\u0928\\u0941\\u092E\\u093E\\u0928|" + // Hanuman
+    "\\u0936\\u093F\\u0935|" + // Shiv
+    "\\u092E\\u0939\\u093E\\u0926\\u0947\\u0935|" + // Mahadev
+    "\\u0915\\u0943\\u0937\\u094D\\u0923|" + // Krishna
+    "\\u0930\\u093E\\u0927\\u093E|" + // Radha
+    "\\u091B\\u0920\\u0940\\s*\\u092E\\u0948\\u092F\\u093E|" + // Chhathi Maiya
+    "\\u0936\\u0947\\u0930\\u093E\\u0935\\u093E\\u0932\\u0940|" + // Sherawali
+    "\\u092D\\u0935\\u0928\\s*\\u0915\\u0940|" + // Bhavan Ki
+    "\\u092E\\u093E\\u092F\\u093E|" + // Maaya
+    "\\u0928\\u093E\\u0935" + // Naav
     ")"
 )
 
