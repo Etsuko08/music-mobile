@@ -3413,7 +3413,7 @@ class MusicService :
         prefs[EnabledModulesKey] ?: "[]",
         prefs[ModuleSourcesKey] ?: "[]",
         prefs[ModuleSettingsKey] ?: "{}",
-        (prefs[EnableSaavnStreamingKey] ?: true).toString(),
+        (prefs[EnableSaavnStreamingKey] ?: false).toString(),
         prefs[SaavnAudioQualityKey].orEmpty(),
         (prefs[SaavnFallbackToYouTubeKey] ?: true).toString(),
         (prefs[EnableTidalStreamingKey] ?: false).toString(),

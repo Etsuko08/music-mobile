@@ -61,7 +61,7 @@ fun JioSettings(
 ) {
     val (saavnEnabled, onSaavnEnabledChange) = rememberPreference(
         EnableSaavnStreamingKey,
-        defaultValue = true
+        defaultValue = false
     )
     val (saavnQuality, onSaavnQualityChange) = rememberEnumPreference(
         SaavnAudioQualityKey,
