@@ -444,7 +444,7 @@ fun BottomSheetPlayer(
 
     val (audioQuality) = rememberEnumPreference(
         AudioQualityKey,
-        defaultValue = AudioQuality.AUTO
+        defaultValue = AudioQuality.HIGH
     )
     val currentFormat by playerConnection.currentFormat.collectAsStateWithLifecycle(initialValue =null)
     

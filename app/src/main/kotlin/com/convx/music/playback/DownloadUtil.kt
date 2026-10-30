@@ -93,7 +93,7 @@ constructor(
     private val lyricsHelper: com.convx.music.lyrics.LyricsHelper,
 ) {
     private val connectivityManager = context.getSystemService<ConnectivityManager>()!!
-    private val audioQuality by enumPreference(context, AudioQualityKey, AudioQuality.AUTO)
+    private val audioQuality by enumPreference(context, AudioQualityKey, AudioQuality.HIGH)
     private val songUrlCache = java.util.concurrent.ConcurrentHashMap<String, Pair<String, Long>>()
     private val autoDownloadRequests = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private val appContext: Context = context

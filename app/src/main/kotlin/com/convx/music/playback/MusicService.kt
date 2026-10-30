@@ -707,7 +707,7 @@ class MusicService :
         audioManager.registerAudioDeviceCallback(audioDeviceCallback, null)
         onOutputChanged()
 
-        audioQuality = dataStore.get(AudioQualityKey).toEnum(com.convx.music.constants.AudioQuality.AUTO)
+        audioQuality = dataStore.get(AudioQualityKey).toEnum(com.convx.music.constants.AudioQuality.HIGH)
         ipVersion = dataStore.get(IpVersionKey).toEnum(IpVersion.AUTO)
         // A saved volume of ~0 would come back silent on every launch with no on-screen way to tell
         // (the system volume does not touch this one), so only an audible value is restored.
@@ -1174,7 +1174,7 @@ class MusicService :
                     } else {
                         prefs[AudioQualityKey]?.let { value ->
                             com.convx.music.constants.AudioQuality.entries.find { it.name == value }
-                        } ?: com.convx.music.constants.AudioQuality.AUTO
+                        } ?: com.convx.music.constants.AudioQuality.HIGH
                     }
                 }
                 .distinctUntilChanged()

@@ -774,7 +774,7 @@ fun VolumeControlRow(
 fun AudioQualitySelector(context: Context) {
     val (audioQuality, onAudioQualityChange) = rememberEnumPreference(
         key = AudioQualityKey,
-        defaultValue = AudioQuality.AUTO
+        defaultValue = AudioQuality.HIGH
     )
 
     Column(
