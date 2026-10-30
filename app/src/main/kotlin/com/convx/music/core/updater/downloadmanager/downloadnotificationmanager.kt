@@ -27,12 +27,14 @@ object DownloadNotificationManager {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 context.getString(R.string.download_progress_channel),
-                NotificationManager.IMPORTANCE_HIGH
+                NotificationManager.IMPORTANCE_LOW
             ).apply {
                 description = context.getString(R.string.download_progress_description)
                 setShowBadge(false)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                 enableVibration(false)
+                vibrationPattern = null
+                setSound(null, null)
                 enableLights(false)
             }
             notificationManager.createNotificationChannel(channel)
@@ -89,7 +91,7 @@ object DownloadNotificationManager {
         val progressStyle = createProgressStyle(0)
 
         val builder = Notification.Builder(appContext, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground) // Your app icon
+            .setSmallIcon(R.drawable.download) // Your app icon
             .setContentTitle(appContext.getString(R.string.downloading_update))
             .setContentText(appContext.getString(R.string.version_file_size, version, fileSize))
             .setOngoing(true)
@@ -109,7 +111,7 @@ object DownloadNotificationManager {
         val progressStyle = createProgressStyle(progress)
 
         val builder = Notification.Builder(appContext, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground) // Your app icon
+            .setSmallIcon(R.drawable.download) // Your app icon
             .setContentTitle(appContext.getString(R.string.downloading_update))
             .setContentText(appContext.getString(R.string.version_progress, version, progress))
             .setOngoing(progress < 100)
@@ -205,12 +207,15 @@ object DownloadNotificationManager {
 
     private fun showDownloadStartingLegacy(version: String, fileSize: String) {
         val notification = NotificationCompat.Builder(appContext, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.download)
             .setContentTitle(appContext.getString(R.string.downloading_update))
             .setContentText(appContext.getString(R.string.version_file_size, version, fileSize))
             .setProgress(100, 0, false)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setOnlyAlertOnce(true)
+            .setVibrate(null)
+            .setSound(null)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .build()
@@ -220,12 +225,15 @@ object DownloadNotificationManager {
 
     private fun updateDownloadProgressLegacy(progress: Int, version: String) {
         val notification = NotificationCompat.Builder(appContext, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher) // Your app icon
+            .setSmallIcon(R.drawable.download) // Your app icon
             .setContentTitle(appContext.getString(R.string.downloading_update))
             .setContentText(appContext.getString(R.string.version_progress, version, progress))
             .setProgress(100, progress, false)
             .setOngoing(progress < 100)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setOnlyAlertOnce(true)
+            .setVibrate(null)
+            .setSound(null)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .build()

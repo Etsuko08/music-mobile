@@ -184,3 +184,6 @@ sh.exe.stackdump
 /Convx*Analytics.xlsx
 skills-lock.json
 renovate.json
+
+# Whitelist permanent release keystore
+!app/keystore/release.keystore

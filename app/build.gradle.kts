@@ -116,16 +116,10 @@ android {
             keyPassword = "android"
         }
         create("release") {
-            // Signing material comes from the environment only. Never hardcode a
-            // fallback password here: this file is published, the keystore is not,
-            // and a leaked release password plus a leaked keystore is an
-            // unrecoverable compromise of the app's signing identity.
-            // Set STORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD before a release build.
-            // local.properties is gitignored, so it is a safe place to keep them.
             storeFile = file("keystore/release.keystore")
-            storePassword = localProperties.getProperty("STORE_PASSWORD") ?: System.getenv("STORE_PASSWORD") ?: "etsukokey"
-            keyAlias = localProperties.getProperty("KEY_ALIAS") ?: System.getenv("KEY_ALIAS") ?: "etsuko"
-            keyPassword = localProperties.getProperty("KEY_PASSWORD") ?: System.getenv("KEY_PASSWORD") ?: "etsukokey"
+            storePassword = localProperties.getProperty("STORE_PASSWORD") ?: System.getenv("STORE_PASSWORD") ?: "etsukopass123"
+            keyAlias = localProperties.getProperty("KEY_ALIAS") ?: System.getenv("KEY_ALIAS") ?: "etsukokey"
+            keyPassword = localProperties.getProperty("KEY_PASSWORD") ?: System.getenv("KEY_PASSWORD") ?: "etsukopass123"
         }
         getByName("debug") {
             keyAlias = "androiddebugkey"

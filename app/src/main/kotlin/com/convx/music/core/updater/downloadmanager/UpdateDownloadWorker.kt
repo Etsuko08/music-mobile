@@ -44,14 +44,14 @@ class UpdateDownloadWorker(private val context: Context, workerParams: WorkerPar
             val fileLength = connection.contentLength
             val downloadDir = File(
                 context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
-                "convx_updates"
+                "etsuko_updates"
             )
             if (!downloadDir.exists()) {
                 downloadDir.mkdirs()
             }
 
             val isZip = apkUrl.contains("nightly.link") || apkUrl.endsWith(".zip")
-            val downloadFile = if (isZip) File(downloadDir, "convx_temp.zip") else File(downloadDir, "convx.apk")
+            val downloadFile = if (isZip) File(downloadDir, "etsuko_temp.zip") else File(downloadDir, "etsuko.apk")
 
             connection.inputStream.use { inputStream ->
                 FileOutputStream(downloadFile).use { outputStream ->
@@ -82,7 +82,7 @@ class UpdateDownloadWorker(private val context: Context, workerParams: WorkerPar
             connection.disconnect()
 
             val finalFile = if (isZip) {
-                val targetApkFile = File(downloadDir, "convx.apk")
+                val targetApkFile = File(downloadDir, "etsuko.apk")
                 var extracted = false
                 try {
                     ZipInputStream(downloadFile.inputStream()).use { zis ->

@@ -162,7 +162,19 @@ fun UpdateScreen(navController: NavHostController) {
                         isDownloadComplete = true
                         val filePath = workInfo.outputData.getString("file_path")
                         if (filePath != null) {
-                            downloadedFile = File(filePath)
+                            val file = File(filePath)
+                            downloadedFile = file
+                            try {
+                                val uri = FileProvider.getUriForFile(context, "${context.packageName}.FileProvider", file)
+                                val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                                    setDataAndType(uri, "application/vnd.android.package-archive")
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                ContextCompat.startActivity(context, installIntent, null)
+                            } catch (e: Exception) {
+                                Timber.tag("ConvxUpdater").e(e, "Auto-install failed: ${e.message}")
+                            }
                         }
                     }
                     WorkInfo.State.FAILED -> {
@@ -331,7 +343,7 @@ fun UpdateScreen(navController: NavHostController) {
                                                 ContextCompat.startActivity(context, installIntent, null)
                                             }
                                         } else {
-                                            val urlToDownload = currentStatus.apkUrl ?: "https://github.com/Etsuko08/music-mobile/releases/download/${currentStatus.version}/convx-${currentStatus.version}.apk"
+                                            val urlToDownload = currentStatus.apkUrl ?: "https://github.com/Etsuko08/music-mobile/releases/download/${currentStatus.version}/etsuko-mobile.apk"
                                             val downloadRequest = OneTimeWorkRequestBuilder<UpdateDownloadWorker>()
                                                 .setInputData(workDataOf("apk_url" to urlToDownload, "version" to currentStatus.version, "file_size" to currentStatus.size))
                                                 .addTag("update_download")
