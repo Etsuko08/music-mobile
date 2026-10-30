@@ -11,7 +11,29 @@ import com.music.innertube.models.SongItem
 import com.music.innertube.models.YTItem
 
 val DEVOTIONAL_FILTER_REGEX = Regex(
-    "(?i)\\b(anand\\s*sahib|durga|gayatri|mantra|aarti|arti|chalisa|bhajan|bhakt|bhakti|kirtan|shabad|katha|stotram|stuti|jagjanani|aigiri\\s*nandini|mahishasura|mahishasuramardini|shakti\\s*mix|namita\\s*agrawal|shahnaz\\s*akhtar|suresh\\s*wadkar|pavagadh|durge\\s*mai|chhoti\\s*naav|bhole|shri\\s*ram|shriram|ram\\s*bhajan|krishna|radha|shiv|mahadev|har\\s*har\\s*mahadev|waheguru|satnam|guru\\s*nanak|sanskrit|dhun|pravachan|satsang|jagran|rehras|ardas|paath|vedic|shloka|sloka|amritwani|devotional|baba|sai\\s*baba|hanuman|ganesh|mata\\s*ke\\s*bhetein|japji|sukhamani|jai\\s*shri|bhagwat|geeta|updesh|parama\\s*danga|rame\\s*rame|naadham\\s*en\\s*jeevane)\\b"
+    "(?i)\\b(" +
+    // Deities & Sacred Figures
+    "shri\\s*ram|shriram|siya\\s*ram|jai\\s*shri\\s*ram|ayodhya|raghunandan|rameshwaram|" +
+    "hanuman|bajrangbali|sankat\\s*mochan|" +
+    "shiv|shiva|mahadev|bhole|bholenath|har\\s*har\\s*mahadev|om\\s*namah\\s*shivay|kailash|kedarnath|somnath|" +
+    "krishna|radha|radhe|kanha|kanhaiya|govind|gopal|shyam|vrindavan|barsana|" +
+    "durga|durge|sherawali|shera\\s*wali|vaishno\\s*devi|pahadawali|mata\\s*rani|jagjanani|amritwani|maa\\s*kali|kali\\s*mata|" +
+    "chhathi\\s*maiya|chhath\\s*geet|chhath|chhati\\s*maiya|" +
+    "ganesh|ganpati|vinayaka|bappa|kartikeya|" +
+    "sai\\s*baba|shirdi|ramdev\\s*pir|khatu\\s*shyam|" +
+    "waheguru|satnam|guru\\s*nanak|guru\\s*gobind|anand\\s*sahib|japji|sukhamani|rehras|ardas|" +
+    "allah|khwaja|pir|dargah|azaan|qawwali|naat|" +
+    // Forms & genres
+    "bhajan|bhakt|bhakti|kirtan|shabad|katha|stotram|stuti|mantra|aarti|arti|chalisa|chalisas|" +
+    "dhun|pravachan|satsang|jagran|chowki|paath|vedic|shloka|sloka|stotras|updesh|geeta|bhagwat|" +
+    "devotional|spiritual|prayer|chant|chants|hymn|gospel|sanskrit|" +
+    // Known devotional artists & specific phrases from screenshots
+    "kanhiya\\s*mittal|kanhiya|hansraj\\s*raghuwanshi|raghuwanshi|lakhbir\\s*singh\\s*lakkha|lakkha|" +
+    "anup\\s*jalota|anuradha\\s*paudwal|narendra\\s*chanchal|sadhana\\s*sargam|karina\\s*pandey|" +
+    "namita\\s*agrawal|shahnaz\\s*akhtar|suresh\\s*wadkar|mithu\\s*marshal|pawan\\s*singh\\s*bhakti|khesari\\s*bhakti|" +
+    "chhoti\\s*naav|choti\\s*naav|aao\\s*ayodhya|tere\\s*bhavan|maaya\\s*tere\\s*bhavan|adbhut\\s*maaya|" +
+    "rame\\s*rame|pavagadh|naadham\\s*en\\s*jeevane|parama\\s*danga|aigiri\\s*nandini|mahishasura|mahishasuramardini|shakti\\s*mix" +
+    ")\\b"
 )
 
 fun isDevotionalText(text: String?): Boolean {
