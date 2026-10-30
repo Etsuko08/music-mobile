@@ -235,8 +235,6 @@
 
 ---
 
----
-
 ### Order 21 (Step 134): Mid-Track Freezes & Far Seek Stalls on Xiaomi/Tablets (v1.7.9)
 * **User Report:**
   > *"read md file and we got another problem can u fix root cuse and tell me at last i shared my app to my friend he uses xaiomi tab when he was listening songs he tried 2-3 songs all getting stopped after playing some mints sometimes seconds chnaging another plays and agin stops after some time and also when that user skip lil lil it plays when he skips like half or more it stops songs so fix thier root cuse genuine fix and from this should not another bug or any issue genuine fix u got? goo"*
@@ -281,8 +279,8 @@ app/
 │   ├── kotlin/com/convx/music/
 │   │   ├── App.kt               <-- Dynamic gl/hl locale detection (Upstream 2.0.4-nightly parity)
 │   │   ├── playback/
-│   │   │   ├── ChunkedDataSource.kt      <-- 512KB chunks (Upstream 2.0.4-nightly parity)
-│   │   │   ├── MusicService.kt           <-- Baseline 2.0.4-nightly + High Quality Default
+│   │   │   ├── ChunkedDataSource.kt      <-- 512KB chunks + auto-reconnect retry circuit (v1.7.9)
+│   │   │   ├── MusicService.kt           <-- High Quality Default + WifiLock buffer persistence + 30s back-buffer + OkHttp retry pool (v1.7.9)
 │   │   │   └── queues/YouTubeQueue.kt    <-- Baseline 2.0.4-nightly queue handling
 │   │   ├── utils/
 │   │   │   ├── AudioFormatCandidates.kt  <-- Upstream 2.0.4-nightly format ranking
@@ -306,9 +304,10 @@ app/
 version.properties                       <-- VERSION_MAJOR=1, MINOR=7, PATCH=9
 ```
 
-### The 5 Golden Rules for Future Development
+### The 6 Golden Rules for Future Development
 1. **Never touch the signing keystore:** `app/keystore/release.keystore` must remain unchanged so existing installations can update in-app without signature conflicts.
 2. **Always default to High Quality:** Keep `AudioQuality.HIGH` as the default in `PlayerSettings`, `MusicService`, and UI to prevent metered 5G connections from dropping to 32kbps failure streams.
 3. **Never hardcode `gl = "US"`:** The app must dynamically detect `locale.country` so Indian and international users get their regional CDN streaming tokens and rights.
 4. **Never write raw Devanagari in PowerShell:** Always use `\uXXXX` unicode escapes in `ContentFilterUtils.kt` to prevent Windows charset corruption.
 5. **Never leak upstream branding:** Sanitize release notes, changelogs, and commit lists so only Etsuko branding appears.
+6. **Never emit premature EOF on mid-chunk network disconnects:** In `ChunkedDataSource.kt`, if a socket closes mid-chunk (`pieceLeft > 0`), always reconnect from `position` with a retry limit; never return `RESULT_END_OF_INPUT` to ExoPlayer unless the stream is truly ended (HTTP 416 or remaining == 0), otherwise ExoPlayer will prematurely kill playback.
