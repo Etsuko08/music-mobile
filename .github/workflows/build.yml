@@ -36,24 +36,28 @@ jobs:
       - name: Generate Signing Keystores
         run: |
           mkdir -p ~/.android app/keystore
-          keytool -genkey -v \
-            -keystore ~/.android/debug.keystore \
-            -storepass android \
-            -alias androiddebugkey \
-            -keypass android \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -dname "CN=Etsuko,O=Etsuko,C=IN"
-          keytool -genkey -v \
-            -keystore app/keystore/release.keystore \
-            -storepass etsukokey \
-            -alias etsuko \
-            -keypass etsukokey \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -dname "CN=Etsuko,O=Etsuko,C=IN"
+          if [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkey -v \
+              -keystore ~/.android/debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Etsuko,O=Etsuko,C=IN"
+          fi
+          if [ ! -f app/keystore/release.keystore ]; then
+            keytool -genkey -v \
+              -keystore app/keystore/release.keystore \
+              -storepass etsukokey \
+              -alias etsuko \
+              -keypass etsukokey \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Etsuko,O=Etsuko,C=IN"
+          fi
 
       - name: Build Optimized Release APK
         env:

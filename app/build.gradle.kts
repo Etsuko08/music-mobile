@@ -117,9 +117,9 @@ android {
         }
         create("release") {
             storeFile = file("keystore/release.keystore")
-            storePassword = localProperties.getProperty("STORE_PASSWORD") ?: System.getenv("STORE_PASSWORD") ?: "etsukopass123"
-            keyAlias = localProperties.getProperty("KEY_ALIAS") ?: System.getenv("KEY_ALIAS") ?: "etsukokey"
-            keyPassword = localProperties.getProperty("KEY_PASSWORD") ?: System.getenv("KEY_PASSWORD") ?: "etsukopass123"
+            storePassword = localProperties.getProperty("STORE_PASSWORD") ?: System.getenv("STORE_PASSWORD") ?: "etsukokey"
+            keyAlias = localProperties.getProperty("KEY_ALIAS") ?: System.getenv("KEY_ALIAS") ?: "etsuko"
+            keyPassword = localProperties.getProperty("KEY_PASSWORD") ?: System.getenv("KEY_PASSWORD") ?: "etsukokey"
         }
         getByName("debug") {
             keyAlias = "androiddebugkey"
