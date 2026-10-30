@@ -303,15 +303,15 @@ object YTPlayerUtils {
      * and supports more formats when available.
      */
     private val STREAM_FALLBACK_CLIENTS: Array<YouTubeClient> = arrayOf(
+        IOS,
+        IPADOS,
         TVHTML5_SIMPLY_EMBEDDED_PLAYER,
-        TVHTML5,
-        VISIONOS,
         ANDROID_VR_1_61_48,
         ANDROID_VR_1_65_10,
+        TVHTML5,
+        VISIONOS,
         WEB_REMIX,
         ANDROID_CREATOR,
-        IPADOS,
-        IOS,
         ANDROID_VR_NO_AUTH,
         MOBILE,
         WEB,
@@ -534,147 +534,32 @@ object YTPlayerUtils {
                 Timber.tag(TAG).d("TIDAL intercept failed or returned null — trying next source")
             }
 
+        }
+
+        // Top Priority: Direct YouTube Music stream resolution
+        val firstAttempt = resolvePlaybackData(videoId, playlistId, audioQuality, connectivityManager, preferAac)
+        if (firstAttempt.isSuccess) {
+            return firstAttempt
+        }
+
+        // Secondary Priority: Seamless high-quality JioSaavn fallback
+        if (context != null) {
             val saavnEnabled = context.dataStore.get(EnableSaavnStreamingKey, true)
             if (saavnEnabled && !preferAac) {
-                Timber.tag(TAG).d("JioSaavn streaming enabled — trying Saavn for videoId=$videoId")
-                val saavnResult = runCatching {
-                    val (currentSong, meta) = resolvePlaybackMetadata(videoId, playlistId)
-
-                    // Prefer the YouTube Music next() title; fall back to videoDetails title
-                    val title = currentSong?.title
-                        ?: meta?.videoDetails?.title.orEmpty()
-
-                    // Use the proper artist list from SongItem (real artist names).
-                    // Fall back to videoDetails.author with "- Topic" stripped.
-                    val artistNames = resolveArtists(
-                        currentSong?.artists?.map { it.name },
-                        meta?.videoDetails?.author.orEmpty(),
-                    )
-                    val artist = artistNames.joinToString(", ")
-
-                    if (title.isBlank()) return@runCatching null
-
-                    Timber.tag(TAG).d("Saavn: resolved title=\"$title\" artists=$artistNames for videoId=$videoId")
-
-                    val albumName = currentSong?.album?.name.orEmpty()
-                    val wantedTitleLower = title.lowercase(java.util.Locale.US)
-                    val wantedArtistsLower = artistNames.map { it.lowercase(java.util.Locale.US) }
-                    val wantedDurationSec = currentSong?.duration
-
-                    val primaryQuery = normalizeSearchQuery(if (albumName.isNotBlank()) {
-                        "$albumName $title $artist"
-                    } else {
-                        "$title $artist"
-                    })
-
-                    val fallbackQuery = normalizeSearchQuery("$title $artist")
-
-                    val bestSong = findBestSaavnMatch(
-                        primaryQuery = primaryQuery,
-                        fallbackQuery = fallbackQuery,
-                        wantedTitle = wantedTitleLower,
-                        wantedArtists = wantedArtistsLower,
-                        wantedDurationSec = wantedDurationSec,
-                    )
-
-                    if (bestSong == null) {
-                        Timber.tag(TAG).d("Saavn: no matching candidate found — falling back to YT")
-                        return@runCatching null
-                    }
-
-                    Timber.tag(TAG).i("Saavn: matched \"${bestSong.title}\" (id=${bestSong.id}, album=\"${bestSong.moreInfo.album}\")")
-
-                    // Treat the selected quality as a minimum; Saavn returns the available rendition.
-                    val qualityKey = context.dataStore.get(SaavnAudioQualityKey, SaavnAudioQuality.QUALITY_320.name)
-                    val minQuality = runCatching { SaavnAudioQuality.valueOf(qualityKey) }
-                        .getOrDefault(SaavnAudioQuality.QUALITY_320)
-                    val minKbps = when (minQuality) {
-                        SaavnAudioQuality.QUALITY_320 -> 320
-                        SaavnAudioQuality.QUALITY_160 -> 160
-                        SaavnAudioQuality.QUALITY_96  -> 96
-                    }
-
-                    val stream = SaavnService.getStreamUrl(bestSong.id)
-                    if (stream == null || stream.url.isBlank()) {
-                        Timber.tag(TAG).d("Saavn: no stream URL for songId=${bestSong.id} — falling back to YT")
-                        return@runCatching null
-                    }
-                    val streamKbps = stream.kbps
-                    if (streamKbps != null && streamKbps < minKbps) {
-                        Timber.tag(TAG).d("Saavn: only ${streamKbps}kbps available for songId=${bestSong.id}, below the ${minKbps}kbps floor — falling back to YT")
-                        return@runCatching null
-                    }
-                    val streamUrl = stream.url
-                    // Unknown bitrate (no recognisable rung in the CDN URL) is
-                    // reported at the requested floor rather than left blank —
-                    // best-effort labeling only, doesn't affect playback.
-                    val deliveredKbps = stream.kbps ?: minKbps
-                    val (itag, qualityLabel) = when {
-                        deliveredKbps >= 320 -> 141 to "320kbps"
-                        deliveredKbps >= 160 -> 140 to "160kbps"
-                        else                 -> 139 to "96kbps"
-                    }
-
-                    // Optimization: Skip synchronous HTTP HEAD request to get content length during playback.
-                    // ExoPlayer parses the content length automatically from HTTP GET response headers on buffer.
-                    val contentLength: Long? = null
-
-                    Timber.tag(TAG).i("Saavn: streaming from JioSaavn (${deliveredKbps}kbps) for videoId=$videoId")
-                    // Reuse the initial YouTube metadata to avoid another request and
-                    // preserve playback tracking, audio configuration, and video details.
-                    PlaybackData(
-                        audioConfig      = meta?.playerConfig?.audioConfig,
-                        videoDetails     = meta?.videoDetails,
-                        playbackTracking = meta?.playbackTracking,
-                        format           = PlayerResponse.StreamingData.Format(
-                            itag             = itag,
-                            url              = streamUrl,
-                            // JioSaavn delivers AAC-LC audio inside a regular MP4 container
-                            // (e.g. https://aac.saavncdn.com/.../{id}_320.mp4)
-                            mimeType         = "audio/mp4; codecs=\"mp4a.40.2\"",
-                            bitrate          = deliveredKbps * 1_000,
-                            width            = null,
-                            height           = null,
-                            contentLength    = contentLength,
-                            quality          = qualityLabel,
-                            fps              = null,
-                            qualityLabel     = null,
-                            averageBitrate   = null,
-                            audioQuality     = qualityLabel,
-                            approxDurationMs = null,
-                            audioSampleRate  = null,
-                            audioChannels    = null,
-                            loudnessDb       = null,
-                            lastModified     = null,
-                            signatureCipher  = null,
-                            cipher           = null,
-                            audioTrack       = null,
-                        ),
-                        streamUrl              = streamUrl,
-                        streamExpiresInSeconds = 3600,
-                        isSaavnStream          = true,   // ← mark as Saavn so downloads skip YT range trick
-                    )
-                }.getOrNull()
-
+                Timber.tag(TAG).w("YouTube stream resolution failed for videoId=$videoId — initiating JioSaavn fallback")
+                val saavnResult = resolveSaavnPlayback(videoId, playlistId, context)
                 if (saavnResult != null) {
+                    Timber.tag(TAG).i("JioSaavn fallback succeeded (${saavnResult.format.quality}) for videoId=$videoId")
                     return Result.success(saavnResult)
                 }
-                Timber.tag(TAG).d("Saavn intercept returned null or failed — falling back to YouTube seamlessly")
             }
         }
 
-        val firstAttempt = resolvePlaybackData(videoId, playlistId, audioQuality, connectivityManager, preferAac)
-
-        // A geo-restricted video fails the same way on a retry — rotating a
-        // guest session or re-attempting as-is can't fix a region block, so
-        // don't waste the one retry on it either way.
+        // Tertiary Priority: Rotate guest session and retry YouTube
         val isGeoRestricted = BotDetectionMitigator.isGeoError(firstAttempt.exceptionOrNull()?.message)
-
-        if (firstAttempt.isFailure && !isGeoRestricted) {
-            // Refresh guest metadata only for explicit session challenges. A CDN
-            // 403, timeout or unavailable track does not establish a broken identity.
+        if (!isGeoRestricted) {
             val label = if (YouTube.cookie == null) "guest" else "signed-in user"
-            Timber.tag(TAG).w("Playback failed for $label. Retrying resolution...")
+            Timber.tag(TAG).w("Playback failed for $label. Retrying resolution with rotated guest session...")
             if (BotDetectionMitigator.notifyPlaybackFailure(
                     isLoggedIn = !YouTube.cookie.isNullOrBlank(),
                     errorMessage = firstAttempt.exceptionOrNull()?.message,
@@ -682,11 +567,125 @@ object YTPlayerUtils {
                 BotDetectionMitigator.rotateGuestSession()
             }
             val retryResult = resolvePlaybackData(videoId, playlistId, audioQuality, connectivityManager, preferAac)
+            if (retryResult.isSuccess) return retryResult
+
+            if (context != null) {
+                val saavnEnabled = context.dataStore.get(EnableSaavnStreamingKey, true)
+                if (saavnEnabled && !preferAac) {
+                    val lastSaavn = resolveSaavnPlayback(videoId, playlistId, context)
+                    if (lastSaavn != null) return Result.success(lastSaavn)
+                }
+            }
             return retryResult
         }
 
         return firstAttempt
     }
+
+    private suspend fun resolveSaavnPlayback(
+        videoId: String,
+        playlistId: String?,
+        context: android.content.Context,
+    ): PlaybackData? = runCatching {
+        val (currentSong, meta) = resolvePlaybackMetadata(videoId, playlistId)
+
+        // Prefer YouTube Music next() title; fall back to videoDetails title
+        val title = currentSong?.title ?: meta?.videoDetails?.title.orEmpty()
+        val artistNames = resolveArtists(
+            currentSong?.artists?.map { it.name },
+            meta?.videoDetails?.author.orEmpty(),
+        )
+        val artist = artistNames.joinToString(", ")
+        if (title.isBlank()) return@runCatching null
+
+        Timber.tag(TAG).d("Saavn: resolved title=\"$title\" artists=$artistNames for videoId=$videoId")
+
+        val albumName = currentSong?.album?.name.orEmpty()
+        val wantedTitleLower = title.lowercase(java.util.Locale.US)
+        val wantedArtistsLower = artistNames.map { it.lowercase(java.util.Locale.US) }
+        val wantedDurationSec = currentSong?.duration
+
+        val primaryQuery = normalizeSearchQuery(if (albumName.isNotBlank()) {
+            "$albumName $title $artist"
+        } else {
+            "$title $artist"
+        })
+        val fallbackQuery = normalizeSearchQuery("$title $artist")
+
+        val bestSong = findBestSaavnMatch(
+            primaryQuery = primaryQuery,
+            fallbackQuery = fallbackQuery,
+            wantedTitle = wantedTitleLower,
+            wantedArtists = wantedArtistsLower,
+            wantedDurationSec = wantedDurationSec,
+        ) ?: run {
+            Timber.tag(TAG).d("Saavn: no matching candidate found for videoId=$videoId")
+            return@runCatching null
+        }
+
+        Timber.tag(TAG).i("Saavn: matched \"${bestSong.title}\" (id=${bestSong.id}, album=\"${bestSong.moreInfo.album}\")")
+
+        val qualityKey = context.dataStore.get(SaavnAudioQualityKey, SaavnAudioQuality.QUALITY_320.name)
+        val minQuality = runCatching { SaavnAudioQuality.valueOf(qualityKey) }
+            .getOrDefault(SaavnAudioQuality.QUALITY_320)
+        val minKbps = when (minQuality) {
+            SaavnAudioQuality.QUALITY_320 -> 320
+            SaavnAudioQuality.QUALITY_160 -> 160
+            SaavnAudioQuality.QUALITY_96  -> 96
+        }
+
+        val stream = SaavnService.getStreamUrl(bestSong.id)
+        if (stream == null || stream.url.isBlank()) {
+            Timber.tag(TAG).d("Saavn: no stream URL for songId=${bestSong.id}")
+            return@runCatching null
+        }
+        val streamKbps = stream.kbps
+        if (streamKbps != null && streamKbps < minKbps) {
+            Timber.tag(TAG).d("Saavn: only ${streamKbps}kbps available for songId=${bestSong.id}, below ${minKbps}kbps floor")
+            return@runCatching null
+        }
+        val streamUrl = stream.url
+        val deliveredKbps = stream.kbps ?: minKbps
+        val (itag, qualityLabel) = when {
+            deliveredKbps >= 320 -> 141 to "320kbps"
+            deliveredKbps >= 160 -> 140 to "160kbps"
+            else                 -> 139 to "96kbps"
+        }
+
+        val contentLength: Long? = null
+
+        Timber.tag(TAG).i("Saavn: streaming from JioSaavn (${deliveredKbps}kbps) for videoId=$videoId")
+        PlaybackData(
+            audioConfig      = meta?.playerConfig?.audioConfig,
+            videoDetails     = meta?.videoDetails,
+            playbackTracking = meta?.playbackTracking,
+            format           = PlayerResponse.StreamingData.Format(
+                itag             = itag,
+                url              = streamUrl,
+                mimeType         = "audio/mp4; codecs=\"mp4a.40.2\"",
+                bitrate          = deliveredKbps * 1_000,
+                width            = null,
+                height           = null,
+                contentLength    = contentLength,
+                quality          = qualityLabel,
+                fps              = null,
+                qualityLabel     = null,
+                averageBitrate   = null,
+                audioQuality     = qualityLabel,
+                approxDurationMs = null,
+                audioSampleRate  = null,
+                audioChannels    = null,
+                loudnessDb       = null,
+                lastModified     = null,
+                signatureCipher  = null,
+                cipher           = null,
+                audioTrack       = null,
+            ),
+            streamUrl              = streamUrl,
+            streamExpiresInSeconds = 3600,
+            isSaavnStream          = true,
+        )
+    }.getOrNull()
 
     private fun isMatchingSaavnCandidate(
         candidate: com.music.jiosaavn.RawSongItem,

@@ -119,7 +119,7 @@ fun OldPlayerMenu(
     val librarySong by database.song(mediaMetadata.id).collectAsState(initial = null)
     val repeatMode by playerConnection.repeatMode.collectAsStateWithLifecycle()
     val shuffleModeEnabled by playerConnection.shuffleModeEnabled.collectAsStateWithLifecycle()
-    val (saavnEnabled) = rememberPreference(EnableSaavnStreamingKey, defaultValue = false)
+    val (saavnEnabled) = rememberPreference(EnableSaavnStreamingKey, defaultValue = true)
 
     val artists = remember(mediaMetadata.artists) {
         mediaMetadata.artists.filter { it.id != null }

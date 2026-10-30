@@ -167,16 +167,13 @@ private fun AppIconTile(
                 .clip(RoundedCornerShape(28))
                 .background(colorResource(R.color.ic_launcher_tile))
                 .border(borderWidth, borderColor, RoundedCornerShape(28)),
+            contentAlignment = Alignment.Center,
         ) {
-            Image(
-                painter = painterResource(icon.previewRes),
+            Icon(
+                painter = painterResource(R.drawable.ic_launcher_mono),
                 contentDescription = null,
-                contentScale = ContentScale.Crop,
-                // The foreground is a 108dp canvas whose outer ring is mask overscan; scaling by
-                // 108/72 leaves exactly the part a launcher mask actually reveals.
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer(scaleX = ADAPTIVE_OVERSCAN, scaleY = ADAPTIVE_OVERSCAN),
+                tint = icon.accentColor,
+                modifier = Modifier.fillMaxSize(0.62f),
             )
         }
         Text(

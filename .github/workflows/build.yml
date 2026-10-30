@@ -79,7 +79,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="v1.7.2"
+          TAG="v1.7.3"
           APK_PATH=$(find app/build/outputs/apk -name '*.apk' | head -n 1)
           if [ -n "$APK_PATH" ]; then
             cp "$APK_PATH" "etsuko-mobile.apk"
@@ -87,10 +87,10 @@ jobs:
             APK_SIZE_MB=$((APK_SIZE / 1048576))
             echo "APK: $APK_PATH ($APK_SIZE_MB MB)"
 
-            NOTES="Etsuko Mobile v1.7.2 - Permanent release keystore embedding (fixes package conflict on updates); auto-launch package installer on download completion; silent non-vibrating update download notification; crisp vector download icon in status bar; restored default high-compatibility playback engine; and complete Etsuko branding purge."
+            NOTES="Etsuko Mobile v1.7.3 - YouTube top priority resolution with seamless 320kbps JioSaavn fallback; JioSaavn streaming enabled by default; auto-skip next song on error enabled by default with resilient 15-track skipping; iOS and iPadOS fast fallback stream clients (<200ms); vibrant theme icons in settings selector; and fixed adaptive launcher icon contrast."
             gh release create "$TAG" "etsuko-mobile.apk" \
               --repo "${{ github.repository }}" \
-              --title "Etsuko Mobile v1.7.2" \
+              --title "Etsuko Mobile v1.7.3" \
               --notes "$NOTES" \
               || gh release upload "$TAG" "etsuko-mobile.apk" --repo "${{ github.repository }}" --clobber
           else

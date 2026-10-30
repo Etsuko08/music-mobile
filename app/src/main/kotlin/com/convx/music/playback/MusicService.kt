@@ -1687,7 +1687,7 @@ class MusicService :
 
         fun skipOnError() {
             // Stop retrying after repeated errors and wait for user input.
-            consecutivePlaybackErr += 2
+            consecutivePlaybackErr += 1
             val nextWindowIndex = player.nextMediaItemIndex
 
             if (consecutivePlaybackErr <= MAX_CONSECUTIVE_ERR && nextWindowIndex != C.INDEX_UNSET) {
@@ -1933,7 +1933,7 @@ class MusicService :
         }
 
         fun handleFinalFailure() {
-            if (dataStore.get(AutoSkipNextOnErrorKey, false)) {
+            if (dataStore.get(AutoSkipNextOnErrorKey, true)) {
                 Timber.tag(TAG).d("All recovery attempts exhausted, auto-skipping to next track")
                 skipOnError()
             } else {
@@ -3076,7 +3076,7 @@ class MusicService :
             return
         }
 
-        if (dataStore.get(AutoSkipNextOnErrorKey, false)) {
+        if (dataStore.get(AutoSkipNextOnErrorKey, true)) {
             Timber.tag(TAG).d("Auto-skipping to next track due to unrecoverable error")
             errorRecovery.skipOnError()
         } else {
@@ -3413,7 +3413,7 @@ class MusicService :
         prefs[EnabledModulesKey] ?: "[]",
         prefs[ModuleSourcesKey] ?: "[]",
         prefs[ModuleSettingsKey] ?: "{}",
-        (prefs[EnableSaavnStreamingKey] ?: false).toString(),
+        (prefs[EnableSaavnStreamingKey] ?: true).toString(),
         prefs[SaavnAudioQualityKey].orEmpty(),
         (prefs[SaavnFallbackToYouTubeKey] ?: true).toString(),
         (prefs[EnableTidalStreamingKey] ?: false).toString(),
@@ -4382,7 +4382,7 @@ class MusicService :
         const val PERSISTENT_AUTOMIX_FILE = "persistent_automix.data"
         const val PERSISTENT_PLAYER_STATE_FILE = "persistent_player_state.data"
         const val PERSISTENT_PLAYBACK_SNAPSHOT_FILE = "persistent_playback_snapshot.data"
-        const val MAX_CONSECUTIVE_ERR = 5
+        const val MAX_CONSECUTIVE_ERR = 15
         const val MAX_RETRY_COUNT = 10
         // Constants for audio normalization
         private const val MAX_GAIN_MB = 300 // Maximum gain in millibels (3 dB)
