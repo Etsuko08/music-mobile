@@ -75,7 +75,7 @@ fun PlaybackLogsDialog(
                         }
                     }
                     val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                    val clip = android.content.ClipData.newPlainText("PlaybackLogs", textToCopy)
+                    val clip = android.content.ClipData.newPlainText("EtsukoPlaybackLogs", textToCopy)
                     cm.setPrimaryClip(clip)
                     Toast.makeText(context, R.string.copied_to_clipboard, Toast.LENGTH_SHORT).show()
                 },

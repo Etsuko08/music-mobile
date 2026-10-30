@@ -54,7 +54,7 @@ fun CrashLogsSettingsScreen(navController: NavController) {
         horizontalPadding = 16.dp,
     ) {
         Text(
-            text = "If Convx closes unexpectedly, its latest crash report appears here. You can copy or share it when asking for help.",
+            text = "If Etsuko closes unexpectedly, its latest crash report appears here. You can copy or share it when asking for help.",
             style = IosTheme.typography.body,
             color = IosTheme.colors.secondaryLabel,
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
@@ -115,13 +115,13 @@ fun CrashLogsSettingsScreen(navController: NavController) {
 
 private fun copyReport(context: Context, report: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    clipboard.setPrimaryClip(ClipData.newPlainText("Convx crash report", report))
+    clipboard.setPrimaryClip(ClipData.newPlainText("Etsuko crash report", report))
 }
 
 private fun shareReport(context: Context, report: String) {
     val send = Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"
-        putExtra(Intent.EXTRA_SUBJECT, "Convx crash report")
+        putExtra(Intent.EXTRA_SUBJECT, "Etsuko crash report")
         putExtra(Intent.EXTRA_TEXT, report)
     }
     context.startActivity(Intent.createChooser(send, "Share crash report"))

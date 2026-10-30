@@ -11,7 +11,7 @@ import com.music.innertube.models.SongItem
 import com.music.innertube.models.YTItem
 
 val DEVOTIONAL_FILTER_REGEX = Regex(
-    "(?i)\\b(" +
+    "(?i)(" +
     // Deities & Sacred Figures
     "shri\\s*ram|shriram|siya\\s*ram|jai\\s*shri\\s*ram|ayodhya|raghunandan|rameshwaram|" +
     "hanuman|bajrangbali|sankat\\s*mochan|" +
@@ -32,8 +32,9 @@ val DEVOTIONAL_FILTER_REGEX = Regex(
     "anup\\s*jalota|anuradha\\s*paudwal|narendra\\s*chanchal|sadhana\\s*sargam|karina\\s*pandey|" +
     "namita\\s*agrawal|shahnaz\\s*akhtar|suresh\\s*wadkar|mithu\\s*marshal|pawan\\s*singh\\s*bhakti|khesari\\s*bhakti|" +
     "chhoti\\s*naav|choti\\s*naav|aao\\s*ayodhya|tere\\s*bhavan|maaya\\s*tere\\s*bhavan|adbhut\\s*maaya|" +
-    "rame\\s*rame|pavagadh|naadham\\s*en\\s*jeevane|parama\\s*danga|aigiri\\s*nandini|mahishasura|mahishasuramardini|shakti\\s*mix" +
-    ")\\b"
+    "rame\\s*rame|pavagadh|naadham\\s*en\\s*jeevane|parama\\s*danga|aigiri\\s*nandini|mahishasura|mahishasuramardini|shakti\\s*mix|" +
+    "भजन|आरती|चालीसा|मंत्र|कथा|कीर्तन|राम|शिव|हनुमान|दुर्गा|कृष्ण|छठ|अयोध्या|ਸ਼ਬਦ|ਕੀਰਤਨ|ਅਨੰਦ ਸਾਹਿਬ" +
+    ")"
 )
 
 fun isDevotionalText(text: String?): Boolean {

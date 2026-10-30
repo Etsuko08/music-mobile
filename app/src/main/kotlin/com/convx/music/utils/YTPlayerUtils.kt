@@ -283,7 +283,7 @@ object YTPlayerUtils {
      * playbackTracking must be supplemented from an authenticated client (WEB_REMIX)
      * when the user is logged in.
      */
-    private val MAIN_CLIENT: YouTubeClient = ANDROID_VR_1_43_32
+    private val MAIN_CLIENT: YouTubeClient = IOS
 
     /** Used when a player response omits streamingData.expiresInSeconds — 6h, YouTube's usual value. */
     private const val DEFAULT_STREAM_EXPIRY_SECONDS = 21600
@@ -303,15 +303,14 @@ object YTPlayerUtils {
      * and supports more formats when available.
      */
     private val STREAM_FALLBACK_CLIENTS: Array<YouTubeClient> = arrayOf(
-        VISIONOS,
-        IOS,
+        IPADOS,
         ANDROID_VR_1_61_48,
         ANDROID_VR_1_65_10,
         WEB_REMIX,
         TVHTML5_SIMPLY_EMBEDDED_PLAYER,
         TVHTML5,
+        VISIONOS,
         ANDROID_CREATOR,
-        IPADOS,
         ANDROID_VR_NO_AUTH,
         MOBILE,
         WEB,
@@ -534,7 +533,7 @@ object YTPlayerUtils {
                 Timber.tag(TAG).d("TIDAL intercept failed or returned null — trying next source")
             }
 
-            val saavnEnabled = context.dataStore.get(EnableSaavnStreamingKey, false)
+            val saavnEnabled = context.dataStore.get(EnableSaavnStreamingKey, true)
             if (saavnEnabled && !preferAac) {
                 Timber.tag(TAG).d("JioSaavn streaming enabled — trying Saavn for videoId=$videoId")
                 val saavnResult = runCatching {
