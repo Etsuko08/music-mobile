@@ -283,7 +283,7 @@ object YTPlayerUtils {
      * playbackTracking must be supplemented from an authenticated client (WEB_REMIX)
      * when the user is logged in.
      */
-    private val MAIN_CLIENT: YouTubeClient = IOS
+    private val MAIN_CLIENT: YouTubeClient = ANDROID_VR_1_43_32
 
     /** Used when a player response omits streamingData.expiresInSeconds — 6h, YouTube's usual value. */
     private const val DEFAULT_STREAM_EXPIRY_SECONDS = 21600
@@ -303,14 +303,15 @@ object YTPlayerUtils {
      * and supports more formats when available.
      */
     private val STREAM_FALLBACK_CLIENTS: Array<YouTubeClient> = arrayOf(
-        IPADOS,
-        ANDROID_VR_1_61_48,
-        ANDROID_VR_1_65_10,
-        WEB_REMIX,
         TVHTML5_SIMPLY_EMBEDDED_PLAYER,
         TVHTML5,
         VISIONOS,
+        ANDROID_VR_1_61_48,
+        ANDROID_VR_1_65_10,
+        WEB_REMIX,
         ANDROID_CREATOR,
+        IPADOS,
+        IOS,
         ANDROID_VR_NO_AUTH,
         MOBILE,
         WEB,

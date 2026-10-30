@@ -105,13 +105,8 @@ data class YouTubeClient(
             clientName = "IOS",
             clientVersion = "21.03.1",
             clientId = "5",
-            userAgent = "com.google.ios.youtube/21.03.1 (iPhone16,2; U; CPU iOS 18_3_1 like Mac OS X; en_US)",
-            osName = "iOS",
-            osVersion = "18.3.1.22D72",
-            deviceMake = "Apple",
-            deviceModel = "iPhone16,2",
-            loginSupported = false,
-            useSignatureTimestamp = false
+            userAgent = "com.google.ios.youtube/21.03.1 (iPhone16,2; U; CPU iOS 18_2 like Mac OS X;)",
+            osVersion = "18.2.22C152",
         )
 
         val MOBILE = YouTubeClient(
