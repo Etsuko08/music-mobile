@@ -2,7 +2,7 @@
 
 ## Our pledge
 
-We want Convx to be a friendly, harassment-free project for everyone, whatever their age, background, identity, experience or ability. We pledge to act and interact in ways that keep the community open, welcoming and respectful.
+We want Etsuko to be a friendly, harassment-free project for everyone, whatever their age, background, identity, experience or ability. We pledge to act and interact in ways that keep the community open, welcoming and respectful.
 
 ## What we expect
 

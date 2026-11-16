@@ -15,7 +15,7 @@ plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version("1.0.0")
 }
 
-rootProject.name = "convx"
+rootProject.name = "etsuko"
 include(":app")
 include(":canvas")
 include(":innertube")

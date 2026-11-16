@@ -1,9 +1,9 @@
-# Etsuko Mobile — Master Development Chronicle & Architecture Encyclopedia (v1.0.0 – v1.7.9)
+# Etsuko Mobile - Master Development Chronicle & Architecture Encyclopedia (v1.0.0 - v1.8.0)
 
 > [!IMPORTANT]
 > **MANDATORY DIRECTIVE FOR ALL FUTURE SESSIONS:**  
 > Before modifying, compiling, or refactoring ANY code in this repository, **YOU MUST READ THIS ENTIRE DOCUMENT FIRST**.  
-> This file records every user order, bug encounter, architectural failure, technical root cause, and permanent solution from `v1.0.0` through `v1.7.9`.
+> This file records every user order, bug encounter, architectural failure, technical root cause, and permanent solution from `v1.0.0` through `v1.8.0`.
 
 ---
 
@@ -279,8 +279,8 @@ app/
 │   ├── kotlin/com/convx/music/
 │   │   ├── App.kt               <-- Dynamic gl/hl locale detection (Upstream 2.0.4-nightly parity)
 │   │   ├── playback/
-│   │   │   ├── ChunkedDataSource.kt      <-- 512KB chunks + auto-reconnect retry circuit (v1.7.9)
-│   │   │   ├── MusicService.kt           <-- High Quality Default + WifiLock buffer persistence + 30s back-buffer + OkHttp retry pool (v1.7.9)
+│   │   │   ├── ChunkedDataSource.kt      <-- 512KB chunks, no EOF at boundaries, 416-verified end (v1.8.0)
+│   │   │   ├── MusicService.kt           <-- High Quality default, WifiLock, stall watchdog, AudioTrack recovery (v1.8.0)
 │   │   │   └── queues/YouTubeQueue.kt    <-- Baseline 2.0.4-nightly queue handling
 │   │   ├── utils/
 │   │   │   ├── AudioFormatCandidates.kt  <-- Upstream 2.0.4-nightly format ranking
@@ -300,8 +300,8 @@ app/
 │       └── mipmap-xxxhdpi/
 │           ├── ic_launcher_foreground.png
 │           └── ic_launcher_*_fg.webp     <-- 13 tinted split-disc theme options
-.github/workflows/build.yml              <-- ARM64 GMS release pipeline & v1.7.9 publisher
-version.properties                       <-- VERSION_MAJOR=1, MINOR=7, PATCH=9
+.github/workflows/build.yml              <-- ARM64 GMS release pipeline & tag-derived publisher (v1.8.0)
+version.properties                       <-- VERSION_MAJOR=1, MINOR=8, PATCH=0
 ```
 
 ### The 6 Golden Rules for Future Development
@@ -311,3 +311,46 @@ version.properties                       <-- VERSION_MAJOR=1, MINOR=7, PATCH=9
 4. **Never write raw Devanagari in PowerShell:** Always use `\uXXXX` unicode escapes in `ContentFilterUtils.kt` to prevent Windows charset corruption.
 5. **Never leak upstream branding:** Sanitize release notes, changelogs, and commit lists so only Etsuko branding appears.
 6. **Never emit premature EOF on mid-chunk network disconnects:** In `ChunkedDataSource.kt`, if a socket closes mid-chunk (`pieceLeft > 0`), always reconnect from `position` with a retry limit; never return `RESULT_END_OF_INPUT` to ExoPlayer unless the stream is truly ended (HTTP 416 or remaining == 0), otherwise ExoPlayer will prematurely kill playback.
+7. **Never trust a range-only `Content-Range` total:** A CDN may report the length of the *requested range* instead of the whole file. Treat the total as authoritative only when it is larger than the first piece or when a short piece proves the real end, and verify an ambiguous 416 with a `bytes=0-1` probe before declaring end-of-stream.
+
+---
+
+## 4. v1.8.0 - Playback Reliability & Video Recovery Release
+
+### User Report
+> *"when my friends install the shared apk, every song stops after a few seconds. the original app does not do this."*
+
+### Root Cause (shared-APK / fresh-install playback stop)
+A freshly installed copy has an empty media cache, so every read reaches the network layer, while a warm install serves most of the track from cache and never touches the failing path.
+
+`ChunkedDataSource` read the total length from `Content-Range` and trusted it unconditionally. googlevideo sometimes answers a bounded request with `Content-Range: bytes 0-524287/524288`, i.e. the total of the *range*, not of the file. The source therefore believed a 3 MB song was 512 KB long, returned `RESULT_END_OF_INPUT` at the first chunk boundary, and ExoPlayer ended the track silently - no `onPlayerError`, so no retry and no skip. That is exactly "the song stops after a few seconds".
+
+### Fixes
+* `ChunkedDataSource.kt`
+  * A chunk boundary can never be reported as end-of-input.
+  * The `Content-Range` total is trusted only when it is larger than the first piece or when a short piece proves the real end (`atEndOfResource`).
+  * An ambiguous 416 is verified with a `Range: bytes=0-1` probe (`probeTotalLength`) before end-of-stream is reported; `Content-Length` is accepted as a fallback when the CDN ignores Range.
+  * `open()` treats a 416 at a non-zero position as a normal end of track (returns an empty resource) instead of raising a playback error.
+  * Open/read failures retry up to 3 times before throwing, so the service can refresh the URL.
+* `MusicService.kt`
+  * Playback watchdog (2s tick) detects "playing but not moving" stalls that produce no error: 45s buffering timeout, 25s progress timeout, 8s ready-but-not-playing timeout, 30s cooldown, per-track attempt cap, and an aggressive cache clear on repeated stalls so a dead URL is replaced.
+  * AudioTrack recovery captures the user's intent before pausing, survives `STATE_READY`, honours a real user pause, and resumes independently of audio-focus history.
+  * `pauseForRecovery()` uses a 500ms guard so internal pauses are not mistaken for user pauses.
+  * Network retry is a single long-lived backoff loop (max 12 waits) that resumes playback afterwards instead of deadlocking in `waitingForNetworkConnection`.
+  * The Wi-Fi lock is held while buffering, not only while `isPlaying`.
+* `NetworkConnectivityObserver.kt`
+  * Every callback republishes the *current* state, so a Wi-Fi to cellular handover is not reported as offline.
+  * Networks that never report `NET_CAPABILITY_VALIDATED` (carriers, VPNs, private Wi-Fi) still count as connected.
+* `YTPlayerUtils.kt` / `PlayerV2Canvas.kt` / `YouTubeVideoPane.kt`
+  * Video probe reads a bounded 64 KB prefix (no OOM, tolerates short clips), accepts 200 or 206, uses the resolving client's user agent, sniffs ftyp/styp/webm, and only offers mp4/webm.
+  * Live streams (`lengthSeconds == 0`) are skipped, 4 candidates are tried, the video URL cache dropped from 10 to 2 minutes, and `forceRefreshForVideo` evicts the resolved URL.
+  * The canvas controller has a 20s load timeout on both load and retry, and the retry button now resolves a fresh URL.
+* Branding
+  * Every user-visible `Convx`/`CONVX` string replaced with `Etsuko`/`ETSUKO` across all locales.
+  * Themes renamed: `Theme.Convx` to `Theme.Etsuko`, `Theme.Convx.Starting` to `Theme.Etsuko.Starting`, `Theme.Widget.Convx` to `Theme.Widget.Etsuko`.
+  * The dead nightly update path was removed; beta updates now follow GitHub pre-releases, and the update notification links to the release page.
+  * `rootProject.name` is `etsuko`; CI artifacts and release titles are tag-derived.
+  * Internal identifiers (package `com.convx.music`, class names, resource IDs, `convx-network://`) stay unchanged on purpose: renaming them would break saved state, widgets, and deep links without any user-visible benefit.
+
+### Rollback
+Safety checkpoint: tag `pre-etsuko-reliability-2026-10-31` and branch `backup/pre-etsuko-reliability-2026-10-31`. Restore with `git reset --hard pre-etsuko-reliability-2026-10-31`.

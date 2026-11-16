@@ -61,6 +61,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 import java.util.Locale
 
 /*
@@ -202,6 +203,7 @@ class CanvasVideoController internal constructor(
     private val attached = ArrayList<Pair<Any, TextureView>>()
     private var fadeInJob: Job? = null
     private var liveSampleJob: Job? = null
+    private var videoLoadTimeoutJob: Job? = null
     internal var videoReady by mutableStateOf(false)
         private set
     internal var videoFailed by mutableStateOf(false)
@@ -236,6 +238,7 @@ class CanvasVideoController internal constructor(
         frameMediaId = loadingMediaId
         surfaceWithFrame = boundTexture
         if (loadingVideoStream != null) {
+            videoLoadTimeoutJob?.cancel()
             videoReady = true
             videoFailed = false
             videoLoading = false
@@ -256,6 +259,7 @@ class CanvasVideoController internal constructor(
 
     internal fun onError() {
         if (loadingVideoStream != null) {
+            videoLoadTimeoutJob?.cancel()
             videoReady = false
             videoFailed = true
             videoLoading = false
@@ -317,6 +321,15 @@ class CanvasVideoController internal constructor(
         videoReady = false
         videoFailed = false
         videoLoading = true
+        videoLoadTimeoutJob?.cancel()
+        videoLoadTimeoutJob = scope.launch {
+            kotlinx.coroutines.delay(VIDEO_LOAD_TIMEOUT_MS)
+            if (loadingVideoStream?.videoId == stream.videoId && !videoReady && videoLoading) {
+                Timber.tag(VIDEO_TAG).w("Video load timed out for ${stream.videoId}")
+                videoLoading = false
+                videoFailed = true
+            }
+        }
         exoPlayer.repeatMode = Player.REPEAT_MODE_OFF
         exoPlayer.stop()
         exoPlayer.clearMediaItems()
@@ -324,7 +337,7 @@ class CanvasVideoController internal constructor(
             MediaItem.Builder()
                 .setUri(stream.url.trim())
                 .setMimeType(stream.mimeType)
-                .setCustomCacheKey("convx-video-picture:${stream.videoId}")
+                .setCustomCacheKey("$VIDEO_CACHE_PREFIX${stream.videoId}")
                 .build(),
             startPositionMs.coerceAtLeast(0L),
         )
@@ -353,11 +366,20 @@ class CanvasVideoController internal constructor(
         videoReady = false
         videoFailed = false
         videoLoading = true
+        videoLoadTimeoutJob?.cancel()
+        videoLoadTimeoutJob = scope.launch {
+            kotlinx.coroutines.delay(VIDEO_LOAD_TIMEOUT_MS)
+            if (!videoReady && videoLoading) {
+                Timber.tag(VIDEO_TAG).w("Video retry timed out for ${stream.videoId}")
+                videoLoading = false
+                videoFailed = true
+            }
+        }
         exoPlayer.setMediaItem(
             MediaItem.Builder()
                 .setUri(stream.url.trim())
                 .setMimeType(stream.mimeType)
-                .setCustomCacheKey("convx-video-picture:${stream.videoId}")
+                .setCustomCacheKey("$VIDEO_CACHE_PREFIX${stream.videoId}")
                 .build(),
             exoPlayer.currentPosition.coerceAtLeast(0L),
         )
@@ -391,6 +413,10 @@ class CanvasVideoController internal constructor(
 private const val VIDEO_FADE_IN_MS = 750
 private const val VIDEO_FADE_OUT_MAX_MS = 1_400
 private const val POSTER_MAX_PX = 720f
+private const val VIDEO_TAG = "CanvasVideo"
+private const val VIDEO_CACHE_PREFIX = "etsuko-video-picture:"
+/** A dead googlevideo connection can otherwise buffer forever with no error. */
+private const val VIDEO_LOAD_TIMEOUT_MS = 20_000L
 
 /**
  * V2's single canvas decoder. [isPlaying] should already fold in "sheet not collapsed";

@@ -652,24 +652,6 @@ fun isNewerVersion(latestVersion: String, currentVersion: String): Boolean {
     return false
 }
 
-// Returns the nightly artifact size for display, or empty when unavailable.
-private fun fetchNightlyArtifactSize(runId: Long): String = try {
-    val artifactsUrl =
-        URL("https://api.github.com/repos/Etsuko08/music-mobile/actions/runs/$runId/artifacts")
-    val artifacts = JSONObject(artifactsUrl.openStream().bufferedReader().use { it.readText() })
-        .optJSONArray("artifacts")
-    val bytes = artifacts?.let { artifactArray ->
-        (0 until artifactArray.length())
-            .map { artifactArray.getJSONObject(it) }
-            .firstOrNull { it.optString("name") == "convx-gms-nightly" }
-            ?.optLong("size_in_bytes")
-    } ?: 0L
-    if (bytes > 0) String.format("%.1f", bytes / (1024.0 * 1024.0)) else ""
-} catch (e: Exception) {
-    Timber.tag("UpdateCheck").e(e, "Error fetching nightly artifact size: ${e.message}")
-    ""
-}
-
 // Finds the newest release eligible for the user's update preference.
 suspend fun checkForUpdate(
     context: Context,
@@ -684,52 +666,6 @@ suspend fun checkForUpdate(
             
             val currentVersion = BuildConfig.VERSION_NAME
             val betaEnabled = getBetaUpdatesSetting(context)
-
-            var isNightlyUpdate = false
-            var nightlyRunObject: JSONObject? = null
-
-            if (betaEnabled) {
-                try {
-                    val nightlyUrl = URL("https://api.github.com/repos/Etsuko08/music-mobile/actions/workflows/nightly.yml/runs?status=success&per_page=1")
-                    val nightlyJson = nightlyUrl.openStream().bufferedReader().use { it.readText() }
-                    val nightlyData = JSONObject(nightlyJson)
-                    val runs = nightlyData.optJSONArray("workflow_runs")
-                    if (runs != null && runs.length() > 0) {
-                        val firstRun = runs.getJSONObject(0)
-                        val runNumber = firstRun.getInt("run_number")
-
-                        // Stable and local builds embed 0 and are never offered nightlies.
-                        if (BuildConfig.NIGHTLY_RUN > 0 && runNumber > BuildConfig.NIGHTLY_RUN) {
-                            isNightlyUpdate = true
-                            nightlyRunObject = firstRun
-                        }
-                    }
-                } catch (e: Exception) {
-                    Timber.tag("UpdateCheck").e(e, "Error checking nightly updates: ${e.message}")
-                }
-            }
-
-            if (isNightlyUpdate && nightlyRunObject != null) {
-                val runNumber = nightlyRunObject.getInt("run_number")
-                val runUpdatedAt = nightlyRunObject.getString("updated_at")
-                val displayTag = "nightly-r$runNumber"
-                
-                val changelogList = mutableListOf<ChangelogSection>()
-                val headCommit = nightlyRunObject.optJSONObject("head_commit")
-                val commitMessage = headCommit?.optString("message") ?: "New features and bug fixes"
-                // Use only the commit subject as the nightly changelog entry.
-                val subjectLine = commitMessage.lineSequence().firstOrNull { it.isNotBlank() } ?: commitMessage
-                changelogList.add(ChangelogSection(context.getString(R.string.changelog), listOf(subjectLine)))
-                
-                val formattedReleaseDate = formatGitHubDate(runUpdatedAt)
-                val apkDownloadUrl = "https://nightly.link/Etsuko08/music-mobile/workflows/nightly.yml/main/convx-gms-nightly.zip"
-                val apkSize = fetchNightlyArtifactSize(nightlyRunObject.getLong("id"))
-
-                withContext(Dispatchers.Main) {
-                    onSuccess(displayTag, true, changelogList, apkSize, formattedReleaseDate, "Bleeding-edge nightly build from main branch.", null, apkDownloadUrl)
-                }
-                return@withContext
-            }
 
             var bestStableRelease: JSONObject? = null
             var bestOverallRelease: JSONObject? = null

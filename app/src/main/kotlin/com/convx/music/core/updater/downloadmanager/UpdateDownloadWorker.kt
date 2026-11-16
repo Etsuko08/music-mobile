@@ -50,7 +50,7 @@ class UpdateDownloadWorker(private val context: Context, workerParams: WorkerPar
                 downloadDir.mkdirs()
             }
 
-            val isZip = apkUrl.contains("nightly.link") || apkUrl.endsWith(".zip")
+            val isZip = apkUrl.endsWith(".zip", ignoreCase = true)
             val downloadFile = if (isZip) File(downloadDir, "etsuko_temp.zip") else File(downloadDir, "etsuko.apk")
 
             connection.inputStream.use { inputStream ->

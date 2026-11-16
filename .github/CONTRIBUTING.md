@@ -1,6 +1,6 @@
-# Contributing to Convx
+# Contributing to Etsuko
 
-Thanks for helping with Convx. This guide describes how the project is laid out, how to build it, and how issues and pull requests are handled. If something here is out of date, please send a pull request that fixes it.
+Thanks for helping with Etsuko. This guide describes how the project is laid out, how to build it, and how issues and pull requests are handled. If something here is out of date, please send a pull request that fixes it.
 
 By taking part you agree to follow the [Code of Conduct](../CODE_OF_CONDUCT.md).
 
@@ -25,8 +25,8 @@ No manual code generation is needed. Gradle runs the protobuf generation and bui
 | Flavor | Use |
 | --- | --- |
 | `foss` | No Google Play services. Use this for most development. |
-| `gms` | Adds Google Cast. This is what the nightly and stable releases ship. |
-| `universal` | One APK for all CPU types. The nightly and stable builds use this. |
+| `gms` | Adds Google Cast. This is what the released APKs ship. |
+| `universal` | One APK for all CPU types. The stable release build uses this. |
 | `arm64`, `x86_64` | Smaller single-ABI builds. |
 
 A flavor is a pair, for example `UniversalFoss` or `UniversalGms`, plus a build type: `Debug` or `Release`. Release builds are signed with a keystore that only the maintainer has, so contributors should build debug.
@@ -77,9 +77,9 @@ The maintainer triages every issue with labels:
 | `status: needs repro` | We can't reproduce it yet and need more detail. |
 | `status: confirmed` | Reproduced and accepted. |
 | `status: in progress` | Someone is working on it. |
-| `status: fixed in nightly` | Fixed in the latest nightly, not yet in stable. |
+| `status: fixed in beta` | Fixed in the latest beta, not yet in stable. |
 
-Please test against the latest [nightly build](https://github.com/Etsuko08/music-mobile/releases/tag/2.0.0-nightly) before reporting. Issues with no activity for 60 days are marked stale and closed a week later.
+Please test against the latest [release](https://github.com/Etsuko08/music-mobile/releases/latest) before reporting. Issues with no activity for 60 days are marked stale and closed a week later.
 
 ## Branches and commits
 
@@ -107,7 +107,7 @@ CI builds every pull request. A PR needs a green build before it is merged.
 
 ## Releases
 
-- **Nightly:** every push to `main` builds a signed universal GMS APK and updates the single rolling pre-release `2.0.0-nightly`. The release notes come from `.github/release-notes/`.
+- **Development builds:** every push to `main` builds a signed ARM64 GMS APK and publishes it as `etsuko-mobile.apk`.
 - **Stable:** a tag named `v*` runs the stable release workflow.
 
 Contributors don't need to do anything for releases. If your change should appear in the notes, mention it in the PR.

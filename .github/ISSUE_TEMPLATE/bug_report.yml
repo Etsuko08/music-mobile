@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in Convx is broken
+description: Something in Etsuko is broken
 title: "[Bug]: "
 labels: ["bug"]
 body:
@@ -13,7 +13,7 @@ body:
     attributes:
       label: Before you submit
       options:
-        - label: I'm using the [latest nightly build](https://github.com/cosmictaserdev-creator/Convx/releases/tag/2.0.0-nightly) (or the problem also happens on stable).
+        - label: I'm using the [latest release](https://github.com/Etsuko08/music-mobile/releases/latest) (or the problem also happens on an older build).
           required: true
         - label: I searched the existing issues and this isn't a duplicate.
           required: true
@@ -74,9 +74,9 @@ body:
   - type: input
     id: app-version
     attributes:
-      label: Convx version
-      description: Settings → Help & About → About. For a nightly, give the date you installed it.
-      placeholder: "2.0.0 nightly"
+      label: Etsuko version
+      description: Settings > Help & About > About. Include the exact version shown.
+      placeholder: "1.7.9"
     validations:
       required: true
 
@@ -85,7 +85,7 @@ body:
     attributes:
       label: Which build?
       options:
-        - Nightly
+        - Beta
         - Stable
         - Debug build I made myself
     validations:

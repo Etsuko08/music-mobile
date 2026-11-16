@@ -240,6 +240,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -517,6 +518,30 @@ class MusicService :
     private var retryCount = 0
     private var silenceSkipJob: Job? = null
 
+    // AudioTrack recovery must outlive the STATE_READY callback that used to
+    // cancel retryJob before playback was resumed.
+    private var audioRendererRecoveryJob: Job? = null
+    private var audioRendererRecoveryResume = false
+    private var audioRendererRecoveryPausedByUser = false
+    // Player.pause() reports PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST even when
+    // *we* pause for recovery. This timestamp guard keeps that internal pause
+    // from being mistaken for the user pressing pause.
+    private var recoveryPauseGuardUntil = 0L
+
+    // General playback watchdog. The lossless watchdog only runs for FLAC-like
+    // streams; this one catches a silent/buffering stall on every source.
+    private var playbackWatchdogJob: Job? = null
+    private var watchdogLastPosition = C.TIME_UNSET
+    private var watchdogLastProgressAt = 0L
+    private var watchdogBufferingSince = 0L
+    private var watchdogReadySince = 0L
+    private var watchdogCooldownUntil = 0L
+    // Stall count per track. Kept separate from the error-recovery counter
+    // because STATE_READY resets that one after every successful re-prepare,
+    // which would make the watchdog treat every stall as the first one.
+    private var watchdogRecoveryMediaId: String? = null
+    private var watchdogRecoveryCount = 0
+
     // Shared by the resolver and IO work; errors and quality changes can invalidate it.
     private val songUrlCache = java.util.concurrent.ConcurrentHashMap<String, Pair<String, Long>>()
 
@@ -734,7 +759,13 @@ class MusicService :
         scope.launch {
             connectivityObserver.networkStatus.collect { isConnected ->
                 isNetworkConnected.value = isConnected
-                if (player.isPlaying) audioResources.acquireWifiLock() else audioResources.releaseWifiLock()
+                // Buffering is still active playback: releasing the Wi-Fi lock
+                // here was letting the radio sleep exactly when it was needed.
+                if (shouldHoldWifiLock()) {
+                    audioResources.acquireWifiLock()
+                } else {
+                    audioResources.releaseWifiLock()
+                }
                 if (isConnected && waitingForNetworkConnection.value) {
                     errorRecovery.triggerRetry()
                 }
@@ -763,7 +794,169 @@ class MusicService :
 
         restorePersistentPlaybackState()
 
+        startPlaybackWatchdog()
+
         startQueuePersistence()
+    }
+
+    /**
+     * Pauses for an internal recovery step without letting the resulting
+     * playWhenReady callback look like a user-initiated pause.
+     */
+    private fun pauseForRecovery() {
+        recoveryPauseGuardUntil = SystemClock.elapsedRealtime() + 500L
+        player.pause()
+    }
+
+    /** True while audio is actively playing or trying to fill its buffer. */
+    private fun shouldHoldWifiLock(): Boolean =
+        player.playWhenReady &&
+            (player.playbackState == Player.STATE_READY || player.playbackState == Player.STATE_BUFFERING)
+
+    /**
+     * Catches the "player says it is playing but nothing moves" class of stall
+     * that does not produce a PlaybackException. It is deliberately conservative
+     * so a normal slow network or a long buffer does not cause a restart.
+     */
+    private fun startPlaybackWatchdog() {
+        playbackWatchdogJob?.cancel()
+        playbackWatchdogJob = scope.launch {
+            while (isActive) {
+                delay(WATCHDOG_INTERVAL_MS)
+                if (!playerInitialized.value || castConnectionHandler?.isCasting?.value == true) {
+                    resetWatchdogProgress()
+                    continue
+                }
+                if (!player.playWhenReady) {
+                    resetWatchdogProgress()
+                    continue
+                }
+
+                val now = SystemClock.elapsedRealtime()
+                // Give recovery a real chance to work before looking again.
+                if (now < watchdogCooldownUntil) continue
+                when (player.playbackState) {
+                    Player.STATE_BUFFERING -> {
+                        watchdogReadySince = 0L
+                        if (watchdogBufferingSince == 0L) {
+                            watchdogBufferingSince = now
+                        } else if (now - watchdogBufferingSince >= WATCHDOG_BUFFERING_TIMEOUT_MS) {
+                            recoverFromPlaybackStall("buffering for ${now - watchdogBufferingSince}ms")
+                        }
+                    }
+
+                    Player.STATE_READY -> {
+                        watchdogBufferingSince = 0L
+                        if (player.isPlaying) {
+                            watchdogReadySince = 0L
+                            val position = player.currentPosition
+                            if (watchdogLastPosition == C.TIME_UNSET ||
+                                position != watchdogLastPosition
+                            ) {
+                                watchdogLastPosition = position
+                                watchdogLastProgressAt = now
+                            } else if (watchdogLastProgressAt > 0L &&
+                                now - watchdogLastProgressAt >= WATCHDOG_PROGRESS_TIMEOUT_MS
+                            ) {
+                                recoverFromPlaybackStall(
+                                    "position stuck at ${position}ms for ${now - watchdogLastProgressAt}ms"
+                                )
+                            }
+                        } else {
+                            if (watchdogReadySince == 0L) {
+                                watchdogReadySince = now
+                            } else if (now - watchdogReadySince >= WATCHDOG_READY_TIMEOUT_MS) {
+                                recoverFromPlaybackStall("ready but not playing")
+                            }
+                        }
+                    }
+
+                    Player.STATE_IDLE -> {
+                        watchdogBufferingSince = 0L
+                        watchdogReadySince = 0L
+                    }
+
+                    else -> resetWatchdogProgress()
+                }
+            }
+        }
+    }
+
+    private fun resetWatchdogProgress() {
+        watchdogLastPosition = C.TIME_UNSET
+        watchdogLastProgressAt = 0L
+        watchdogBufferingSince = 0L
+        watchdogReadySince = 0L
+    }
+
+    private fun recoverFromPlaybackStall(reason: String) {
+        if (stallRecoveryJob?.isActive == true ||
+            retryJob?.isActive == true ||
+            audioRendererRecoveryJob?.isActive == true ||
+            waitingForNetworkConnection.value
+        ) {
+            resetWatchdogProgress()
+            return
+        }
+
+        val mediaId = player.currentMediaItem?.mediaId
+        if (mediaId == null) {
+            resetWatchdogProgress()
+            return
+        }
+
+        watchdogCooldownUntil = SystemClock.elapsedRealtime() + WATCHDOG_COOLDOWN_MS
+        resetWatchdogProgress()
+
+        if (errorRecovery.hasExceededRetryLimit(mediaId)) {
+            Timber.tag(TAG).w("Playback stall for $mediaId exceeded retry limit")
+            errorRecovery.markSongAsFailed(mediaId)
+            errorRecovery.handleFinalFailure()
+            return
+        }
+
+        if (watchdogRecoveryMediaId != mediaId) {
+            watchdogRecoveryMediaId = mediaId
+            watchdogRecoveryCount = 0
+        }
+        // STATE_READY clears the error-recovery counter after every successful
+        // re-prepare, so the watchdog needs its own cap; otherwise a track whose
+        // URL can never be resolved would be retried forever.
+        if (watchdogRecoveryCount >= MAX_RETRY_PER_SONG) {
+            Timber.tag(TAG).w("Playback stall for $mediaId exhausted watchdog retries")
+            errorRecovery.markSongAsFailed(mediaId)
+            errorRecovery.handleFinalFailure()
+            return
+        }
+        val attempt = watchdogRecoveryCount
+        watchdogRecoveryCount = attempt + 1
+
+        errorRecovery.incrementRetryCount(mediaId)
+        Timber.tag(TAG).w("Playback watchdog recovering $mediaId: $reason (attempt ${attempt + 1})")
+        stallRecoveryJob = scope.launch {
+            try {
+                val index = player.currentMediaItemIndex
+                val position = player.currentPosition.coerceAtLeast(0L)
+                pauseForRecovery()
+                delay(250)
+                if (!playerInitialized.value || player.currentMediaItemIndex != index) return@launch
+                // The first stall is usually a transient socket hiccup: just
+                // re-prepare. A repeated stall means the resolved URL itself is
+                // dead (throttled/expired), so force a brand-new stream.
+                if (attempt >= 1) {
+                    Timber.tag(TAG).w("Repeated stall for $mediaId; forcing a fresh stream URL")
+                    errorRecovery.performAggressiveCacheClear(mediaId)
+                }
+                player.seekTo(index, position)
+                player.play()
+                player.prepare()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Timber.tag(TAG).e(error, "Playback watchdog recovery failed")
+                errorRecovery.handleFinalFailure()
+            }
+        }
     }
 
     private fun startQueuePersistence() {
@@ -1649,25 +1842,53 @@ class MusicService :
 
             waitingForNetworkConnection.value = true
 
-            // Avoid leaving the service waiting for network with no active retry job.
+            // A single long-lived waiter owns the retry loop. The old code
+            // recursed into itself from inside its own job; the `isActive`
+            // guard then returned immediately and the loop silently died,
+            // leaving playback stuck forever with no retry scheduled.
             if (retryJob?.isActive == true) return
 
             retryJob?.cancel()
             retryJob = scope.launch {
-                // Exponential backoff: 3s, 6s, 12s, 24s... max 30s
-                val delayMs = minOf(3000L * (1 shl retryCount), 30000L)
-                Timber.tag(TAG).d("Waiting ${delayMs}ms before retry attempt ${retryCount + 1}/$MAX_RETRY_COUNT")
-                delay(delayMs)
+                var waitAttempts = 0
+                while (isActive && waitingForNetworkConnection.value) {
+                    // Exponential backoff: 3s, 6s, 12s, 24s... max 30s
+                    val delayMs = minOf(3000L * (1 shl minOf(retryCount, 4)), 30000L)
+                    Timber.tag(TAG).d("Waiting ${delayMs}ms before retry attempt ${retryCount + 1}/$MAX_RETRY_COUNT")
+                    delay(delayMs)
 
-                if (!isActive) return@launch
-                retryCount++
-                if (isNetworkConnected.value) {
-                    triggerRetry()
-                } else {
-                    // Keep waiting until the connection returns.
-                    waitOnNetworkError()
+                    if (!isActive) return@launch
+
+                    if (isNetworkConnected.value) {
+                        retryCount++
+                        waitingForNetworkConnection.value = false
+                        Timber.tag(TAG).d("Network restored, retrying playback")
+                        resumePlaybackAfterNetwork()
+                        return@launch
+                    }
+
+                    waitAttempts++
+                    if (waitAttempts >= MAX_NETWORK_WAIT_ATTEMPTS) {
+                        Timber.tag(TAG).w(
+                            "Network did not return after $waitAttempts waits, stopping playback"
+                        )
+                        waitingForNetworkConnection.value = false
+                        stopOnError()
+                        retryCount = 0
+                        return@launch
+                    }
                 }
             }
+        }
+
+        /** Re-resolve the data source and resume without stealing audio focus. */
+        private fun resumePlaybackAfterNetwork() {
+            if (player.currentMediaItem == null) return
+            if (retryCount > 3) {
+                val currentPosition = player.currentPosition
+                player.seekTo(player.currentMediaItemIndex, currentPosition)
+            }
+            player.prepare()
         }
 
         fun triggerRetry() {
@@ -1746,6 +1967,9 @@ class MusicService :
             return currentRetries >= MAX_RETRY_PER_SONG
         }
 
+        /** How many recovery attempts this song has already consumed. */
+        fun retryCountFor(mediaId: String): Int = currentMediaIdRetryCount[mediaId] ?: 0
+
         fun incrementRetryCount(mediaId: String) {
             val currentRetries = currentMediaIdRetryCount[mediaId] ?: 0
             currentMediaIdRetryCount[mediaId] = currentRetries + 1
@@ -1779,6 +2003,8 @@ class MusicService :
             bypassQualityCache: Boolean = false,
         ) {
             incrementRetryCount(mediaId)
+            // A concrete playback error supersedes any "waiting for network" state.
+            waitingForNetworkConnection.value = false
             retryJob?.cancel()
             retryJob = scope.launch {
                 if (clearCaches) performAggressiveCacheClear(mediaId)
@@ -1820,12 +2046,24 @@ class MusicService :
 
             incrementRetryCount(mediaId)
 
+            // Capture the user's intent *before* pausing. Previously this read
+            // `wasPlayingBeforeAudioFocusLoss`, which is only true when audio
+            // focus was lost, so a normal AudioTrack failure never resumed and
+            // the song looked like it "stopped after a few seconds".
+            val shouldResume = player.playWhenReady || player.isPlaying
+            val resumeAt = player.currentPosition.coerceAtLeast(0L)
+            val resumeIndex = player.currentMediaItemIndex
+
+            audioRendererRecoveryJob?.cancel()
             retryJob?.cancel()
-            retryJob = scope.launch {
+            waitingForNetworkConnection.value = false
+            audioRendererRecoveryResume = shouldResume
+            audioRendererRecoveryPausedByUser = false
+            audioRendererRecoveryJob = scope.launch {
                 try {
                     // Pause immediately to stop the renderer, then wait longer than a normal
                     // retry (3s instead of 1s) so it doesn't keep failing in a loop.
-                    player.pause()
+                    pauseForRecovery()
                     Timber.tag(TAG).d("Paused playback due to AudioTrack error")
                     delay(RETRY_DELAY_MS * 3)
 
@@ -1834,27 +2072,40 @@ class MusicService :
                         return@launch
                     }
 
+                    // The user may have pressed pause (or picked another track)
+                    // while we were waiting; never fight that.
+                    if (!audioRendererRecoveryResume || audioRendererRecoveryPausedByUser) {
+                        Timber.tag(TAG).d("AudioTrack recovery skipped: user no longer wants playback")
+                        return@launch
+                    }
+
                     val currentIndex = player.currentMediaItemIndex
                     if (currentIndex != C.INDEX_UNSET) {
                         // Seek to current position to force a clean audio renderer reinit
-                        val currentPosition = player.currentPosition
+                        val currentPosition = if (currentIndex == resumeIndex) {
+                            maxOf(resumeAt, player.currentPosition.coerceAtLeast(0L))
+                        } else {
+                            player.currentPosition.coerceAtLeast(0L)
+                        }
                         player.seekTo(currentIndex, currentPosition)
                         player.prepare()
 
                         Timber.tag(TAG).d("Retrying playback for $mediaId after AudioTrack error")
 
-                        if (wasPlayingBeforeAudioFocusLoss) {
-                            delay(500)
-                            if (hasAudioFocus && playerInitialized.value) {
-                                if (castConnectionHandler?.isCasting?.value != true) {
-                                    player.play()
-                                }
-                            }
+                        delay(500)
+                        if (audioRendererRecoveryResume &&
+                            !audioRendererRecoveryPausedByUser &&
+                            playerInitialized.value &&
+                            castConnectionHandler?.isCasting?.value != true
+                        ) {
+                            player.play()
                         }
                     } else {
                         Timber.tag(TAG).w("Invalid media item index during AudioTrack recovery")
                         handleFinalFailure()
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     Timber.tag(TAG).e(e, "Error during AudioTrack error recovery")
                     handleFinalFailure()
@@ -1866,10 +2117,12 @@ class MusicService :
         fun handleDecoderReclaimError(mediaId: String?) {
             if (mediaId == null) { handleFinalFailure(); return }
             incrementRetryCount(mediaId)
+            val shouldResume = player.playWhenReady || player.isPlaying
+            waitingForNetworkConnection.value = false
             retryJob?.cancel()
             retryJob = scope.launch {
                 Timber.tag(TAG).d("Decoder reclaim: pausing, waiting 2s, re-prepare for $mediaId")
-                player.pause()
+                pauseForRecovery()
                 delay(2000)
                 if (!playerInitialized.value) return@launch
                 val idx = player.currentMediaItemIndex
@@ -1877,7 +2130,9 @@ class MusicService :
                 player.seekTo(idx, pos)
                 player.prepare()
                 delay(500)
-                if (hasAudioFocus && playerInitialized.value) {
+                if (shouldResume && !audioRendererRecoveryPausedByUser &&
+                    hasAudioFocus && playerInitialized.value
+                ) {
                     if (castConnectionHandler?.isCasting?.value != true) {
                         player.play()
                     }
@@ -2624,7 +2879,12 @@ class MusicService :
         previousMediaItemIndex = player.currentMediaItemIndex
         // Normal track changes use the default artwork dissolve; DJ handoffs bypass this listener.
         _crossfadeDurationMs.value = 0L
-        if (player.isPlaying) audioResources.acquireWifiLock()
+        // Keep the radio awake through the buffering phase of the new track.
+        if (shouldHoldWifiLock()) audioResources.acquireWifiLock()
+        watchdogRecoveryMediaId = null
+        watchdogRecoveryCount = 0
+        watchdogCooldownUntil = 0L
+        resetWatchdogProgress()
         streamResolver.prefetchUpcoming()
 
         playerStallWatchdogs[player]?.let { watchdog ->
@@ -2758,6 +3018,9 @@ class MusicService :
         }
 
         if (playWhenReady) {
+            // Playback is starting again, so a pause from an earlier recovery
+            // must no longer block future automatic resumes.
+            audioRendererRecoveryPausedByUser = false
             when (audioResources.requestAudioFocus()) {
                 FocusRequestResult.GRANTED -> {
                     pendingFocusStart = false
@@ -2777,10 +3040,14 @@ class MusicService :
             }
         } else if (
             reason == Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST &&
-            !isPausingForAudioFocus
+            !isPausingForAudioFocus &&
+            SystemClock.elapsedRealtime() >= recoveryPauseGuardUntil
         ) {
             wasPlayingBeforeAudioFocusLoss = false
             audioResources.cancelDelayedFocusStart()
+            // A real user pause must win over an in-flight AudioTrack recovery.
+            audioRendererRecoveryResume = false
+            audioRendererRecoveryPausedByUser = true
         }
 
         if (playWhenReady && !player.playWhenReady) return
@@ -4246,7 +4513,7 @@ class MusicService :
         }
 
         sleepTimer.notifySongTransition()
-        if (player.isPlaying) audioResources.acquireWifiLock()
+        if (shouldHoldWifiLock()) audioResources.acquireWifiLock()
     }
 
     private data class ScrobbleTrack(
@@ -4396,6 +4663,18 @@ class MusicService :
         private const val MIN_GAIN_MB = -1500 // Minimum gain in millibels (-15 dB)
 
         private const val TAG = "MusicService"
+
+        // Playback watchdog. It only intervenes when the player claims to be
+        // playing but makes no progress, so normal slow buffering is unaffected.
+        private const val WATCHDOG_INTERVAL_MS = 2_000L
+        private const val WATCHDOG_BUFFERING_TIMEOUT_MS = 45_000L
+        private const val WATCHDOG_PROGRESS_TIMEOUT_MS = 25_000L
+        private const val WATCHDOG_READY_TIMEOUT_MS = 8_000L
+        /** Time for a recovery attempt to take effect before the watchdog acts again. */
+        private const val WATCHDOG_COOLDOWN_MS = 30_000L
+
+        /** Give up after roughly 5 minutes of continuous offline waiting. */
+        private const val MAX_NETWORK_WAIT_ATTEMPTS = 12
 
         /** Ceiling on how long an audio duck is allowed to hold the volume at
          *  20% before it is force-restored (some devices never send the gain). */

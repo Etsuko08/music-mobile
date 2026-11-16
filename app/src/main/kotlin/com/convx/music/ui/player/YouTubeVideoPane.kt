@@ -130,7 +130,13 @@ internal fun YouTubeVideoPane(
             if (visible && failed) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(stringResource(R.string.video_unavailable), color = Color.White)
-                    TextButton(onClick = videoController::retryVideo) {
+                    TextButton(onClick = {
+                        // The cached URL is usually the reason it failed; drop it
+                        // and resolve a fresh one instead of replaying the dead one.
+                        YTPlayerUtils.forceRefreshForVideo(stream.videoId)
+                        videoController.retryVideo()
+                        connection.requestVideoStream(stream.mediaId)
+                    }) {
                         Text(stringResource(R.string.video_retry), color = Color.White)
                     }
                 }

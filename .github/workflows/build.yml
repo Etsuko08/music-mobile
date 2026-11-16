@@ -79,18 +79,22 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="v1.7.9"
+          VERSION_MAJOR=$(grep -E '^VERSION_MAJOR=' version.properties | cut -d= -f2)
+          VERSION_MINOR=$(grep -E '^VERSION_MINOR=' version.properties | cut -d= -f2)
+          VERSION_PATCH=$(grep -E '^VERSION_PATCH=' version.properties | cut -d= -f2)
+          VERSION_NAME="${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}"
+          TAG="v${VERSION_NAME}"
           APK_PATH=$(find app/build/outputs/apk -name '*.apk' | head -n 1)
           if [ -n "$APK_PATH" ]; then
             cp "$APK_PATH" "etsuko-mobile.apk"
             APK_SIZE=$(stat -c%s "etsuko-mobile.apk")
             APK_SIZE_MB=$((APK_SIZE / 1048576))
-            echo "APK: $APK_PATH ($APK_SIZE_MB MB)"
+            echo "APK: $APK_PATH ($APK_SIZE_MB MB) as $TAG"
 
-            NOTES="Etsuko Mobile v1.7.9 - Resilient Playback and Seek Engine: eliminates mid-track audio stalls and seek freezes on Xiaomi/HyperOS tablets and mobile networks. ChunkedDataSource now auto-reconnects on socket disconnects without false EOF, OkHttpClient auto-retries on connection drops with active connection pooling, DefaultLoadControl retains a 30s back buffer, and high-performance WifiLock stays held during buffering and playback."
+            NOTES="Etsuko Mobile v${VERSION_NAME} - Playback reliability release: fixes songs that stopped after a few seconds for freshly installed copies, mid-track stalls on mobile networks and tablets, and video playback failures. The player now detects stalled buffering, refreshes expired stream URLs, keeps the Wi-Fi radio awake while buffering, and never treats a chunk boundary as the end of a song."
             gh release create "$TAG" "etsuko-mobile.apk" \
               --repo "${{ github.repository }}" \
-              --title "Etsuko Mobile v1.7.9" \
+              --title "Etsuko Mobile $TAG" \
               --notes "$NOTES" \
               || gh release upload "$TAG" "etsuko-mobile.apk" --repo "${{ github.repository }}" --clobber
           else

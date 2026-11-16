@@ -38,13 +38,10 @@ object UpdateNotificationHelper {
             nm.createNotificationChannel(channel)
         }
 
-        // Direct download URL format from convxupdater - use the full tag (vX.X.X or bX.X.X) or nightly link
-        val apkUrl = if (versionName.contains("nightly", ignoreCase = true)) {
-            "https://nightly.link/Etsuko08/music-mobile/workflows/nightly.yml/main/convx-gms-nightly.zip"
-        } else {
-            "https://github.com/Etsuko08/music-mobile/releases/download/$versionName/convx-$versionName.apk"
-        }
-        val intent = Intent(Intent.ACTION_VIEW, apkUrl.toUri())
+        // Always land on the release page: the APK asset name differs between
+        // build pipelines, so a hardcoded direct link is a coin flip.
+        val releaseUrl = "https://github.com/Etsuko08/music-mobile/releases/tag/$versionName"
+        val intent = Intent(Intent.ACTION_VIEW, releaseUrl.toUri())
 
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         val pending = PendingIntent.getActivity(context, NOTIFICATION_ID, intent, flags)

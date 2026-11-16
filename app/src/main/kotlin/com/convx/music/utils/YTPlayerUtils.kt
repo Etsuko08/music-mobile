@@ -170,7 +170,11 @@ private fun parseModuleSettings(value: String): Map<String, Map<String, String>>
 object YTPlayerUtils {
     data class VideoStream(val mediaId: String, val url: String, val mimeType: String, val width: Int, val height: Int, val contentLength: Long, val videoId: String = mediaId)
     private val resolvedVideoStreams = android.util.LruCache<String, Pair<Long, VideoStream>>(32)
-    private const val VIDEO_STREAM_CACHE_MS = 10 * 60 * 1000L
+    // googlevideo URLs expire quickly and are bound to the resolving client's
+    // IP. Ten minutes was long enough to hand a dead URL to the player on a
+    // retry, which is what made video "fail" and never come back.
+    private const val VIDEO_STREAM_CACHE_MS = 2 * 60 * 1000L
+    private const val VIDEO_PROBE_BYTES = 64 * 1024L
 
     /** Resolve a video track separately; music playback remains owned by MusicService. */
     suspend fun videoStream(videoId: String): VideoStream? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -186,33 +190,23 @@ object YTPlayerUtils {
                 val response = YouTube.player(videoId, null, client, null, null).getOrNull() ?: continue
                 if (response.playabilityStatus.status != "OK") continue
                 if (response.videoDetails?.musicVideoType == "MUSIC_VIDEO_TYPE_ATV") return@withContext null
+                // A live stream reports 0 seconds and has no finite, seekable
+                // file for this player.
+                if (response.videoDetails?.lengthSeconds?.toIntOrNull() == 0) continue
                 val candidates = (response.streamingData?.adaptiveFormats.orEmpty() + response.streamingData?.formats.orEmpty())
                     .filter { it.width != null && it.height != null && it.mimeType.startsWith("video/") }
+                    .filter { isSupportedVideoMime(it.mimeType) }
                     .sortedWith(compareByDescending<PlayerResponse.StreamingData.Format> { it.mimeType.contains("avc1") }
                         .thenByDescending { (it.height ?: 0) <= 1080 }
                         .thenByDescending { (it.fps ?: 30) <= 30 }
                         .thenByDescending { it.height ?: 0 }.thenBy { it.bitrate })
-                for (format in candidates.take(3)) {
+                for (format in candidates.take(4)) {
                     // Never use findUrlOrNull's audio-only fallback for a video surface.
                     val rawUrl = format.url ?: (format.signatureCipher ?: format.cipher)?.let {
                         CipherDeobfuscator.deobfuscateStreamUrl(it, videoId)
                     } ?: continue
                     val url = EjsNTransformSolver.transformNParamInUrl(rawUrl)
-                    val probe = okhttp3.Request.Builder().url(url)
-                        .header("User-Agent", YouTubeClient.USER_AGENT_WEB)
-                        .header("Range", "bytes=0-131071").build()
-                    val length = httpClient.newCall(probe).execute().use { result ->
-                        val prefix = result.body.bytes()
-                        val boxType = if (prefix.size >= 8) String(prefix, 4, 4, Charsets.US_ASCII) else null
-                        val mp4 = boxType == "ftyp" || boxType == "styp"
-                        val webm = prefix.size >= 4 &&
-                            prefix[0] == 0x1a.toByte() && prefix[1] == 0x45.toByte() &&
-                            prefix[2] == 0xdf.toByte() && prefix[3] == 0xa3.toByte()
-                        val contentRange = result.header("Content-Range")
-                        if (result.code == 206 && contentRange?.startsWith("bytes 0-") == true && (mp4 || webm)) {
-                            contentRange.substringAfterLast('/')?.toLongOrNull()
-                        } else null
-                    }?.takeIf { it > 0L } ?: continue
+                    val length = probeVideoUrl(url, client.userAgent, format.mimeType) ?: continue
                     Timber.tag("VideoStream").d("Playable video: %s, %sp", client.clientName, format.height)
                     val stream = VideoStream(videoId, url,
                         format.mimeType.substringBefore(';'), format.width!!, format.height!!, length)
@@ -226,6 +220,61 @@ object YTPlayerUtils {
             }
         }
         null
+    }
+
+    /** Only containers Android's media stack can demux are worth probing. */
+    private fun isSupportedVideoMime(mimeType: String): Boolean {
+        val mime = mimeType.substringBefore(';').lowercase()
+        return mime == "video/mp4" || mime == "video/webm"
+    }
+
+    /**
+     * Confirms that [url] actually serves a playable container starting at byte
+     * zero. Only a small prefix is read, so a huge body can never OOM the app.
+     * Accepts 200 as well as 206 because some CDN edges ignore Range.
+     */
+    private fun probeVideoUrl(url: String, userAgent: String, mimeType: String): Long? {
+        val request = okhttp3.Request.Builder()
+            .url(url)
+            .header("User-Agent", userAgent)
+            .header("Accept", "*/*")
+            .header("Range", "bytes=0-$VIDEO_PROBE_BYTES")
+            .build()
+        return try {
+            httpClient.newCall(request).execute().use { result ->
+                if (result.code != 200 && result.code != 206) return@use null
+                // Read at most the probe size. `readByteArray(n)` insists on
+                // exactly n bytes and would reject a short but valid clip.
+                val body = result.body
+                val declared = body.contentLength()
+                val wanted = if (declared > 0L) minOf(VIDEO_PROBE_BYTES, declared) else VIDEO_PROBE_BYTES
+                val buffered = okio.Buffer()
+                body.source().read(buffered, wanted)
+                val prefix = buffered.readByteArray()
+                if (prefix.isEmpty()) return@use null
+                val mp4 = prefix.size >= 8 &&
+                    (String(prefix, 4, 4, Charsets.US_ASCII) == "ftyp" ||
+                        String(prefix, 4, 4, Charsets.US_ASCII) == "styp")
+                val webm = prefix.size >= 4 &&
+                    prefix[0] == 0x1a.toByte() && prefix[1] == 0x45.toByte() &&
+                    prefix[2] == 0xdf.toByte() && prefix[3] == 0xa3.toByte()
+                if (!mp4 && !webm) {
+                    Timber.tag("VideoStream").d("Probe rejected: not a playable container (%s)", mimeType)
+                    return@use null
+                }
+                val contentRange = result.header("Content-Range")
+                val total = when {
+                    contentRange != null -> contentRange.substringAfterLast('/', "").trim().toLongOrNull()
+                    else -> result.header("Content-Length")?.toLongOrNull()
+                }
+                total?.takeIf { it > 0L }
+            }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Timber.tag("VideoStream").d(error, "Video probe failed")
+            null
+        }
     }
 
     private const val logTag = "YTPlayerUtils"
@@ -1215,5 +1264,8 @@ object YTPlayerUtils {
 
     fun forceRefreshForVideo(videoId: String) {
         Timber.tag(logTag).d("Force refreshing for videoId: $videoId")
+        // Drop the resolved video URL so the next attempt performs a fresh
+        // player request instead of replaying a dead/expired googlevideo URL.
+        resolvedVideoStreams.remove(videoId)
     }
 }

@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-Only the latest release (and the current nightly/beta build) are supported with security fixes. Older versions won't receive backports — please update before reporting an issue.
+Only the latest release (and the current beta build) are supported with security fixes. Older versions won't receive backports — please update before reporting an issue.
 
 ## Reporting a Vulnerability
 
@@ -19,4 +19,4 @@ We'll acknowledge reports within a few days and aim to ship a fix before any pub
 
 ## Scope
 
-This covers the Convx Android app and the code in this repository. It does not cover the third-party services the app talks to (YouTube Music, Apple Music, Discord, Last.fm, etc.) — report issues in those to their respective owners.
+This covers the Etsuko Android app and the code in this repository. It does not cover the third-party services the app talks to (YouTube Music, Apple Music, Discord, Last.fm, etc.) — report issues in those to their respective owners.
