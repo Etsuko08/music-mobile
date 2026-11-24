@@ -1,4 +1,4 @@
-# Etsuko Mobile - Master Development Chronicle & Architecture Encyclopedia (v1.0.0 - v1.8.0)
+# Etsuko Mobile - Master Development Chronicle & Architecture Encyclopedia (v1.0.0 - v1.8.1)
 
 > [!IMPORTANT]
 > **MANDATORY DIRECTIVE FOR ALL FUTURE SESSIONS:**  
@@ -354,3 +354,35 @@ A freshly installed copy has an empty media cache, so every read reaches the net
 
 ### Rollback
 Safety checkpoint: tag `pre-etsuko-reliability-2026-10-31` and branch `backup/pre-etsuko-reliability-2026-10-31`. Restore with `git reset --hard pre-etsuko-reliability-2026-10-31`.
+
+## 5. v1.8.1 - Cross-SoC Playback Reliability (vivo / oppo / realme) & Video Teardown
+
+### User Report
+> *"my friends on vivo/oppo/realme still get songs stopping after a few seconds, some songs never play, and video shows retry. and video keeps playing after I switch back to the song."*
+
+### Why v1.8.0 did not cover these devices
+v1.8.0 fixed the `ChunkedDataSource` end-of-input bug, which explained a *fresh install* stopping on every phone. The remaining reports are SoC- and carrier-specific:
+
+* **Audio decoder.** YouTube's preferred stream is Opus in WebM. Android has no hardware Opus decoder on most phones, so Media3 decodes it in software. On a weak MediaTek SoC that is also running the cover-canvas/video decoder and the Compose UI, the software audio path is the first thing to starve: playback simply stops advancing, often without a `PlaybackException`. AAC (itag 139/140, in MP4) is hardware-decoded on every SoC.
+* **Silent auto-advance.** When the resolved stream ends early (expired/truncated URL), ExoPlayer advances to the next queue item and raises no error. Nothing recovers it, so the listener hears "the song stopped after a few seconds".
+* **IPv6.** `IpVersion.AUTO` kept the resolver's address order. On carriers with broken IPv6 every connection first waits out the connect timeout on the AAAA record, which reads as "some songs never play" / "video retry".
+* **Video lifecycle.** Leaving video mode relied on the following canvas load. If that load early-returned, the video decoder kept running under the song UI.
+
+### Fixes
+* `AudioFormatCandidates.kt`
+  * Hardware-decodable AAC is weighted ×135% of its raw bitrate, so a normal 128 kbps AAC beats a comparable 160 kbps Opus, while a 48/64 kbps AAC still loses to high-bitrate Opus. `preferAac` remains the hard filter for recovery. Tests added.
+* `MusicService.kt`
+  * `onPositionDiscontinuity(AUTO_TRANSITION)` now detects a track that advanced at least 20 s and more than a quarter before its declared duration: it drops the suspect URL and cached bytes, forces the AAC/standard variant, and resumes 3 s before the cut. Capped at 2 recoveries per track, skipped during a crossfade, and self-heals once the track plays past the old cut point.
+  * A repeated watchdog stall on a software-decoded (Opus/Vorbis) stream also forces AAC.
+  * `AUTO` DNS is IPv4-first in the playback client; connect timeout 15 s → 10 s.
+* `YTPlayerUtils.kt`, `innertube/InnerTube.kt`, `innertube/pages/NewPipe.kt`
+  * `AUTO` DNS is IPv4-first everywhere (IPv6 kept as fallback).
+* `PlayerV2Canvas.kt`
+  * New `stopVideo()` runs unconditionally when `videoStream` becomes null, so the decoder stops before the canvas loads; it keeps the TextureView bound so the cover animation still renders. Video capped at 1280×1280 (720p) to avoid needing a second hardware decoder slot.
+* `FullscreenVideoHost.kt`, `Player_v2.kt`, `ClassicVideo.kt`
+  * Deselecting video closes the matching fullscreen session and always informs the service (except the DIY editor preview, which must never disturb real playback).
+* `DebugLogs.kt` / `App.kt`
+  * The rotating file log is now planted in **release** builds so "Share log" carries real evidence from an affected device. Writes go through a bounded queue and a single low-priority daemon thread, so logging can never block the main or audio thread.
+
+### Rollback
+v1.8.0 is the known-good playback baseline: commit `c5b081c`, release tag `v1.8.0`. `git reset --hard c5b081c` restores it.

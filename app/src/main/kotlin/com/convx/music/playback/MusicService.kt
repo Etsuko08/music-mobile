@@ -3011,6 +3011,22 @@ class MusicService :
                 player.seekTo(0, 0)
                 player.prepare()
                 player.play()
+            } else if (repeatMode != REPEAT_MODE_ONE) {
+                // A one-item queue (or the last item) that ends early never raises
+                // AUTO_TRANSITION, so recover it here instead of stopping silently.
+                val index = player.currentMediaItemIndex
+                val mediaId = player.currentMediaItem?.mediaId
+                val duration = player.duration
+                val endedAt = player.currentPosition
+                if (mediaId != null && duration != C.TIME_UNSET && duration > 0L && endedAt > 0L) {
+                    val prematureCutoff = minOf(
+                        (duration - PREMATURE_END_MIN_REMAINING_MS).coerceAtLeast(0L),
+                        duration * 3 / 4,
+                    )
+                    if (endedAt < prematureCutoff) {
+                        handlePrematureTrackEnd(mediaId, index, endedAt, duration)
+                    }
+                }
             }
         }
 
