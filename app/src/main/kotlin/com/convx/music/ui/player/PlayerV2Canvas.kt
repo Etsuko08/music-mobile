@@ -210,6 +210,9 @@ class CanvasVideoController internal constructor(
         private set
     internal var videoLoading by mutableStateOf(false)
         private set
+    /** True while the decoder holds a song video (not the cover canvas loop). */
+    internal var showingVideo by mutableStateOf(false)
+        private set
 
     internal fun attach(token: Any, view: TextureView) {
         attached.removeAll { it.first === token }
@@ -275,6 +278,7 @@ class CanvasVideoController internal constructor(
     }
 
     internal suspend fun load(mediaId: String?, primary: String?, fallback: String?, fadeOutMillis: Int) {
+        showingVideo = false
         if (loadingVideoStream != null) {
             loadingVideoStream = null
             liveSampleJob?.cancel()
@@ -311,6 +315,7 @@ class CanvasVideoController internal constructor(
         liveSampleJob?.cancel()
         liveSampleJob = null
         if (fade.value > 0f) fade.animateTo(0f, tween(fadeOutMillis, easing = SeamlessEasing))
+        showingVideo = true
         loadingVideoStream = stream
         loadingMediaId = stream.mediaId
         loadingUrl = stream.url
@@ -342,6 +347,40 @@ class CanvasVideoController internal constructor(
             startPositionMs.coerceAtLeast(0L),
         )
         exoPlayer.prepare()
+    }
+
+    /**
+     * Stops and clears the decoder without loading a replacement.
+     *
+     * Leaving video mode used to rely on the following canvas load, which could
+     * early-return and leave the picture (and the hardware decoder) running under
+     * the song UI. This is unconditional and cheap, so callers can always run it
+     * before deciding what to play next.
+     */
+    internal fun stopVideo() {
+        if (!showingVideo && loadingVideoStream == null) return
+        videoLoadTimeoutJob?.cancel()
+        videoLoadTimeoutJob = null
+        liveSampleJob?.cancel()
+        liveSampleJob = null
+        fadeInJob?.cancel()
+        showingVideo = false
+        loadingVideoStream = null
+        loadingMediaId = null
+        loadingUrl = null
+        primary = null
+        fallback = null
+        frameMediaId = null
+        surfaceWithFrame = null
+        videoReady = false
+        videoFailed = false
+        videoLoading = false
+        runCatching { exoPlayer.stop() }
+        runCatching { exoPlayer.clearMediaItems() }
+        // Deliberately keep the TextureView bound: the canvas loop that loads next
+        // reuses this surface, and un-binding here would blank it until the pane
+        // re-attaches. stop()/clearMediaItems() already release the video decoder.
+        scope.launch { runCatching { fade.snapTo(0f) } }
     }
 
     internal fun seekTo(positionMs: Long) {
@@ -442,6 +481,10 @@ fun rememberCanvasVideoController(
                     .buildUpon()
                     .setMaxVideoFrameRate(30)
                     .setMaxVideoBitrate(2_500_000)
+                    // A 1080p+ surface buys nothing on a phone and costs a decoder
+                    // slot on the SoCs that only have one or two (many MediaTek
+                    // devices). 720p landscape and portrait stays allowed.
+                    .setMaxVideoSize(1280, 1280)
                     .build()
                 setAudioAttributes(
                     AudioAttributes.Builder()
@@ -504,8 +547,14 @@ fun rememberCanvasVideoController(
     val primary = artwork?.preferredAnimationUrl?.takeIf { it.isNotBlank() }
     val fallback = artwork?.animated?.takeIf { it.isNotBlank() }
     LaunchedEffect(mediaId, primary, fallback, videoStream) {
-        if (videoStream != null) controller.loadVideo(videoStream, videoStartPositionMs, fadeOut)
-        else controller.load(mediaId, primary, fallback, fadeOut)
+        if (videoStream != null) {
+            controller.loadVideo(videoStream, videoStartPositionMs, fadeOut)
+        } else {
+            // Leaving video mode: stop the picture straight away so a video can
+            // never keep playing under the song UI, then load the canvas loop.
+            controller.stopVideo()
+            controller.load(mediaId, primary, fallback, fadeOut)
+        }
     }
     return controller
 }

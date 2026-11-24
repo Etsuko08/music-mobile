@@ -44,9 +44,9 @@ internal fun rememberClassicVideo(
     val standalone = isPreviewOnly || presentation == null
     val watch = if (standalone) previewWatch else id != null && presentation?.selectedVideoId == id
     val select: (Boolean) -> Unit = { selected ->
-        if (standalone) {
-            previewWatch = selected
-        } else {
+        previewWatch = selected
+        // Never let the DIY editor preview toggle the real player's source.
+        if (!isPreviewOnly) {
             presentation?.selectVideo(id, selected)
             id?.let { connection.service.setVideoPlaybackMode(it, selected) }
         }
@@ -61,7 +61,15 @@ internal fun rememberClassicVideo(
     }
     DisposableEffect(connection) { onDispose { connection.requestVideoAvailability(null) } }
     LaunchedEffect(watch, id) {
-        if (watch) id?.let(connection::requestVideoStream) else connection.clearVideoStreamRequest()
+        if (watch) {
+            id?.let(connection::requestVideoStream)
+        } else {
+            connection.clearVideoStreamRequest()
+            // Closing the video while fullscreen must close that surface too.
+            id?.let { watchedId ->
+                if (presentation?.session?.stream?.mediaId == watchedId) presentation.close()
+            }
+        }
     }
 
     val stream = (lookup as? VideoStreamLookup.Ready)?.stream?.takeIf { it.mediaId == id }

@@ -225,6 +225,8 @@ import com.convx.music.playback.queues.filterVideoSongs
 import com.convx.music.utils.CoilBitmapLoader
 import com.convx.music.utils.DiscordRPC
 import com.convx.music.utils.NetworkConnectivityObserver
+import com.convx.music.utils.PlaybackLogLevel
+import com.convx.music.utils.PlaybackLogManager
 import com.convx.music.utils.ScrobbleManager
 import com.convx.music.utils.SyncUtils
 import com.convx.music.utils.YTPlayerUtils
@@ -558,6 +560,9 @@ class MusicService :
     // Tracks that should fall back to standard audio after repeated lossless failures.
     private val forceStandardAudioMediaIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private val forceAacAudioMediaIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    /** Per-track attempts at recovering a stream that ended long before its duration. */
+    private val prematureEndRecoveries = java.util.concurrent.ConcurrentHashMap<String, Int>()
     /** Tracks whose matching video is showing use YouTube audio for picture sync. */
     private val videoModeMediaIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
@@ -850,6 +855,17 @@ class MusicService :
                         if (player.isPlaying) {
                             watchdogReadySince = 0L
                             val position = player.currentPosition
+                            // Playing past the point where it cut before means the
+                            // stream is healthy now: allow future recovery again.
+                            val currentId = player.currentMediaItem?.mediaId
+                            val duration = player.duration
+                            if (currentId != null && duration != C.TIME_UNSET && duration > 0L) {
+                                val cutoff = minOf(
+                                    (duration - PREMATURE_END_MIN_REMAINING_MS).coerceAtLeast(0L),
+                                    duration * 3 / 4,
+                                )
+                                if (position >= cutoff) prematureEndRecoveries.remove(currentId)
+                            }
                             if (watchdogLastPosition == C.TIME_UNSET ||
                                 position != watchdogLastPosition
                             ) {
@@ -887,6 +903,15 @@ class MusicService :
         watchdogLastProgressAt = 0L
         watchdogBufferingSince = 0L
         watchdogReadySince = 0L
+    }
+
+    /** True when the current audio is decoded on the CPU (Opus/Vorbis in WebM). */
+    private fun isSoftwareDecodedAudio(): Boolean {
+        val format = player.audioFormat ?: return false
+        val mime = format.sampleMimeType ?: return false
+        return mime == androidx.media3.common.MimeTypes.AUDIO_OPUS ||
+            mime == androidx.media3.common.MimeTypes.AUDIO_VORBIS ||
+            format.codecs?.contains("opus", ignoreCase = true) == true
     }
 
     private fun recoverFromPlaybackStall(reason: String) {
@@ -946,6 +971,15 @@ class MusicService :
                 if (attempt >= 1) {
                     Timber.tag(TAG).w("Repeated stall for $mediaId; forcing a fresh stream URL")
                     errorRecovery.performAggressiveCacheClear(mediaId)
+                    // A software-decoded stream (Opus/Vorbis) can stop advancing
+                    // without ever raising an error on weak SoCs. Move that track
+                    // to the hardware AAC variant before the retry.
+                    if (isSoftwareDecodedAudio()) {
+                        forceAacAudioMediaIds.add(mediaId)
+                        forceStandardAudioMediaIds.add(mediaId)
+                        bypassCacheForQualityChange.add(mediaId)
+                        Timber.tag(TAG).w("Forcing AAC for $mediaId after a software-decoded stall")
+                    }
                 }
                 player.seekTo(index, position)
                 player.play()
@@ -3010,6 +3044,44 @@ class MusicService :
         }
     }
 
+    private fun handlePrematureTrackEnd(mediaId: String, index: Int, endedAtMs: Long, durationMs: Long) {
+        if (!playerInitialized.value || isSilenceSkipping) return
+        // Only network-resolved YouTube tracks can be re-resolved this way.
+        if (!mediaId.matches(YOUTUBE_ID_REGEX)) return
+        if (index < 0 || index >= player.mediaItemCount) return
+        val attempts = prematureEndRecoveries[mediaId] ?: 0
+        if (attempts >= MAX_PREMATURE_END_RECOVERIES) {
+            Timber.tag(TAG).w(
+                "Premature end for $mediaId at ${endedAtMs}ms of ${durationMs}ms; " +
+                    "giving up after $attempts retries"
+            )
+            return
+        }
+        prematureEndRecoveries[mediaId] = attempts + 1
+        Timber.tag(TAG).w(
+            "Premature end for $mediaId at ${endedAtMs}ms of ${durationMs}ms " +
+                "(attempt ${attempts + 1}); resuming"
+        )
+        PlaybackLogManager.log(
+            PlaybackLogLevel.WARNING,
+            "Premature track end; recovering",
+            "$mediaId stopped at ${endedAtMs}ms of ${durationMs}ms",
+        )
+        // The stream ended early: prefer the hardware-decodable AAC variant and
+        // discard the cached bytes/URL so the retry resolves a fresh source.
+        forceAacAudioMediaIds.add(mediaId)
+        forceStandardAudioMediaIds.add(mediaId)
+        bypassCacheForQualityChange.add(mediaId)
+        errorRecovery.performAggressiveCacheClear(mediaId)
+        runCatching { YTPlayerUtils.forceRefreshForVideo(mediaId) }
+        val resumeAt = (endedAtMs - PREMATURE_END_REWIND_MS).coerceAtLeast(0L)
+        // Mirror retryStream: the URL resolver re-runs at prepare() once the caches
+        // for this id are gone, so the item itself does not need replacing.
+        player.seekTo(index, resumeAt)
+        player.prepare()
+        player.play()
+    }
+
     override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
         // Safety net: if local player tries to start while casting, immediately pause it
         if (playWhenReady && castConnectionHandler?.isCasting?.value == true) {
@@ -3480,7 +3552,7 @@ class MusicService :
                     OkHttpClient
                         .Builder()
                         .retryOnConnectionFailure(true)
-                        .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                        .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
                         .readTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
                         .connectionPool(okhttp3.ConnectionPool(8, 30, java.util.concurrent.TimeUnit.SECONDS))
                         .dns(object : Dns {
@@ -3489,7 +3561,11 @@ class MusicService :
                                 return when (this@MusicService.ipVersion) {
                                     IpVersion.IPV4 -> addresses.filter { it is Inet4Address }.ifEmpty { addresses }
                                     IpVersion.IPV6 -> addresses.filter { it is Inet6Address }.ifEmpty { addresses }
-                                    IpVersion.AUTO -> addresses
+                                    // AUTO used to keep the resolver's order, so a carrier with
+                                    // broken IPv6 made every connection wait out the timeout on
+                                    // the AAAA record before falling back. IPv4 reaches every
+                                    // googlevideo edge; the IPv6 records stay as a fallback.
+                                    IpVersion.AUTO -> addresses.sortedBy { it !is Inet4Address }
                                 }
                             }
                         })
@@ -4481,6 +4557,28 @@ class MusicService :
                 "oldId=${oldPosition.mediaItem?.mediaId} newIndex=${newPosition.mediaItemIndex} " +
                 "newId=${newPosition.mediaItem?.mediaId}"
         )
+        // A track that auto-advances long before its declared duration ended
+        // silently: ExoPlayer has no error for that, so onPlayerError never runs and
+        // the listener just hears "the song stopped after a few seconds". Recover it.
+        if (reason != Player.DISCONTINUITY_REASON_AUTO_TRANSITION) return
+        // A crossfade ends the outgoing track early on purpose.
+        if (crossfade?.isTransitioning() == true) return
+        if (oldPosition.mediaItemIndex == newPosition.mediaItemIndex) return
+        val mediaItem = oldPosition.mediaItem ?: return
+        val timeline = player.currentTimeline
+        if (timeline.isEmpty || oldPosition.mediaItemIndex >= timeline.windowCount) return
+        val duration = timeline.getWindow(oldPosition.mediaItemIndex, Timeline.Window()).durationMs
+        if (duration == C.TIME_UNSET || duration <= 0L) return
+        val endedAt = oldPosition.positionMs
+        if (endedAt <= 0L) return
+        // Ignore a normal ending: only a cut that lands well before the last
+        // quarter (and at least 20s early) is treated as a broken stream.
+        val prematureCutoff = minOf(
+            (duration - PREMATURE_END_MIN_REMAINING_MS).coerceAtLeast(0L),
+            duration * 3 / 4,
+        )
+        if (endedAt >= prematureCutoff) return
+        handlePrematureTrackEnd(mediaItem.mediaId, oldPosition.mediaItemIndex, endedAt, duration)
     }
 
     /**
@@ -4632,6 +4730,11 @@ class MusicService :
             PlaybackException.ERROR_CODE_AUDIO_TRACK_INIT_FAILED,
             PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED,
         )
+        /** A stream that ends this far before its metadata duration is treated as cut. */
+        private const val PREMATURE_END_MIN_REMAINING_MS = 20_000L
+        private const val PREMATURE_END_REWIND_MS = 3_000L
+        private const val MAX_PREMATURE_END_RECOVERIES = 2
+        private val YOUTUBE_ID_REGEX = Regex("[A-Za-z0-9_-]{11}")
         /** Paused-and-backgrounded time before the service stops itself; matches Media3's FGS timeout. */
         private const val IdleStopMs = 10 * 60_000L
         private const val CastInitDelayMs = 3_000L

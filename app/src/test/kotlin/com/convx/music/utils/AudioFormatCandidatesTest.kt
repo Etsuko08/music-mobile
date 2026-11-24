@@ -41,4 +41,16 @@ class AudioFormatCandidatesTest {
         val opus = format(2, 160000, "audio/webm")
         assertEquals(listOf(aac), rankedAudioFormats(listOf(opus, aac), AudioQuality.HIGH, false, true))
     }
+
+    @Test fun hardwareAacBeatsComparableOpus() {
+        val aac = format(1, 128000)
+        val opus = format(2, 160000, "audio/webm")
+        assertEquals(listOf(aac, opus), rankedAudioFormats(listOf(opus, aac), AudioQuality.HIGH, false, false))
+    }
+
+    @Test fun highBitrateOpusStillBeatsLowBitrateAac() {
+        val lowAac = format(1, 48000)
+        val opus = format(2, 160000, "audio/webm")
+        assertEquals(listOf(opus, lowAac), rankedAudioFormats(listOf(lowAac, opus), AudioQuality.HIGH, false, false))
+    }
 }

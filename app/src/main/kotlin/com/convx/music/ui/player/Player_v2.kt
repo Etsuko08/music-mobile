@@ -252,9 +252,11 @@ private fun PlayerV2Content(
     val watchVideo = if (isPreviewOnly || videoPresentation == null) previewWatchVideo else
         mediaMetadata?.id != null && videoPresentation.selectedVideoId == mediaMetadata?.id
     val selectVideo: (Boolean) -> Unit = { selected ->
-        if (isPreviewOnly || videoPresentation == null) previewWatchVideo = selected
-        else {
-            videoPresentation.selectVideo(mediaMetadata?.id, selected)
+        previewWatchVideo = selected
+        // The DIY editor preview must never disturb real playback; everywhere else
+        // always tell the service so leaving video restores the song's audio source.
+        if (!isPreviewOnly) {
+            videoPresentation?.selectVideo(mediaMetadata?.id, selected)
             mediaMetadata?.id?.let { playerConnection.service.setVideoPlaybackMode(it, selected) }
         }
     }

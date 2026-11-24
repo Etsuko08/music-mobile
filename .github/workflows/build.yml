@@ -91,7 +91,7 @@ jobs:
             APK_SIZE_MB=$((APK_SIZE / 1048576))
             echo "APK: $APK_PATH ($APK_SIZE_MB MB) as $TAG"
 
-            NOTES="Etsuko Mobile v${VERSION_NAME} - Playback reliability release: fixes songs that stopped after a few seconds for freshly installed copies, mid-track stalls on mobile networks and tablets, and video playback failures. The player now detects stalled buffering, refreshes expired stream URLs, keeps the Wi-Fi radio awake while buffering, and never treats a chunk boundary as the end of a song."
+            NOTES="Etsuko Mobile v${VERSION_NAME} - Reliability release for every device: songs no longer cut off on MediaTek phones (vivo/oppo/realme) because audio now prefers the hardware-decoded AAC stream, a track that ends far too early is detected and resumed instead of silently stopping, carriers with broken IPv6 no longer stall stream connections, and leaving video mode now stops the video decoder instead of letting it keep running under the song."
             gh release create "$TAG" "etsuko-mobile.apk" \
               --repo "${{ github.repository }}" \
               --title "Etsuko Mobile $TAG" \

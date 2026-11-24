@@ -291,7 +291,9 @@ object YTPlayerUtils {
                 return when (YouTube.ipVersion) {
                     IpVersion.IPV4 -> addresses.filter { it is Inet4Address }.ifEmpty { addresses }
                     IpVersion.IPV6 -> addresses.filter { it is Inet6Address }.ifEmpty { addresses }
-                    IpVersion.AUTO -> addresses
+                    // IPv4 first: a carrier with broken IPv6 otherwise makes every
+                    // connection wait out the timeout on the AAAA record first.
+                    IpVersion.AUTO -> addresses.sortedBy { it !is Inet4Address }
                 }
             }
         })

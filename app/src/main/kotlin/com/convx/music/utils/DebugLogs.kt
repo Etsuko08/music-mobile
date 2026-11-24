@@ -17,6 +17,7 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.ArrayBlockingQueue
 
 /**
  * Timber tree that mirrors every log line into a file under cacheDir, so a
@@ -25,32 +26,56 @@ import java.util.Locale
  */
 class FileLoggingTree(private val logFile: File) : Timber.Tree() {
 
+    // Writing from the caller would put disk I/O on the main and audio threads and
+    // can jank or ANR exactly on the slow devices this log exists to diagnose.
+    // Lines are queued and written by one low-priority daemon thread; if the queue
+    // fills up, new lines are dropped rather than blocking playback.
+    private val queue = ArrayBlockingQueue<String>(MAX_QUEUED_LINES)
+
+    private val writer = Thread({ drain() }, "etsuko-log-writer").apply {
+        isDaemon = true
+        priority = Thread.MIN_PRIORITY
+        start()
+    }
+
     override fun log(priority: Int, tag: String?, message: String, t: Throwable?) {
-        try {
-            synchronized(this) {
-                val line = buildString {
-                    append(timestampFormatter.format(Date()))
-                    append(' ')
-                    append(levelName(priority))
-                    append('/')
-                    append(tag ?: "Timber")
-                    append(": ")
-                    append(message)
-                    if (t != null) {
-                        append('\n')
-                        append(Log.getStackTraceString(t))
-                    }
+        // SimpleDateFormat is not thread-safe; formatting is cheap and disk-free.
+        val line = synchronized(timestampFormatter) {
+            buildString {
+                append(timestampFormatter.format(Date()))
+                append(' ')
+                append(levelName(priority))
+                append('/')
+                append(tag ?: "Timber")
+                append(": ")
+                append(message)
+                if (t != null) {
                     append('\n')
+                    append(Log.getStackTraceString(t))
                 }
+                append('\n')
+            }
+        }
+        queue.offer(line)
+    }
+
+    private fun drain() {
+        while (true) {
+            val line = try {
+                queue.take()
+            } catch (interrupted: InterruptedException) {
+                return
+            }
+            try {
                 val old = File(logFile.parentFile, "${logFile.name}.old")
                 if (logFile.exists() && logFile.length() + line.length > MAX_FILE_BYTES) {
                     old.delete()
                     logFile.renameTo(old)
                 }
                 logFile.appendText(line)
+            } catch (e: IOException) {
+                // Logging must never break the app
             }
-        } catch (e: IOException) {
-            // Logging must never break the app
         }
     }
 
@@ -66,6 +91,7 @@ class FileLoggingTree(private val logFile: File) : Timber.Tree() {
 
     companion object {
         private const val MAX_FILE_BYTES = 5 * 1024 * 1024
+        private const val MAX_QUEUED_LINES = 2048
 
         // Only touched inside the synchronized(log) block in log()
         private val timestampFormatter = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)

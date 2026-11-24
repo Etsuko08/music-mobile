@@ -37,7 +37,8 @@ class NewPipeDownloaderImpl(
                     return when (YouTube.ipVersion) {
                         IpVersion.IPV4 -> addresses.filter { it is Inet4Address }.ifEmpty { addresses }
                         IpVersion.IPV6 -> addresses.filter { it is Inet6Address }.ifEmpty { addresses }
-                        IpVersion.AUTO -> addresses
+                        // IPv4 first, IPv6 as fallback (see InnerTube / MusicService).
+                        IpVersion.AUTO -> addresses.sortedBy { it !is Inet4Address }
                     }
                 }
             })

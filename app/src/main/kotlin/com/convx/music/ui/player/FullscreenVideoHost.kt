@@ -62,7 +62,13 @@ internal class FullscreenVideoState {
         action?.invoke()
     }
 
-    fun selectVideo(id: String?, selected: Boolean) { selectedVideoId = id.takeIf { selected } }
+    fun selectVideo(id: String?, selected: Boolean) {
+        selectedVideoId = id.takeIf { selected }
+        // Switching back to the song must also tear down the fullscreen surface,
+        // otherwise its decoder keeps running over the player (and the video looks
+        // like it never stopped).
+        if (!selected && id != null && session?.stream?.mediaId == id) close()
+    }
 }
 
 internal val LocalFullscreenVideo = staticCompositionLocalOf<FullscreenVideoState?> { null }

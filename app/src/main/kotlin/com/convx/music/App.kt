@@ -144,8 +144,11 @@ class App : Application(), SingletonImageLoader.Factory {
 
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
-            Timber.plant(DebugLogs.tree(this))
         }
+        // Release builds have no logcat, so keep the rotating file log in every
+        // build: "Share log" in Playback logs then carries real evidence from the
+        // affected device instead of guesswork.
+        Timber.plant(DebugLogs.tree(this))
 
         // Load the coil cache size on a background thread so the first image
         // render never blocks on a DataStore read.
@@ -231,7 +234,9 @@ class App : Application(), SingletonImageLoader.Factory {
         }
 
         YouTube.useLoginForBrowse = settings[UseLoginForBrowse] ?: true
-        YouTube.ipVersion = settings[IpVersionKey]?.toEnum(defaultValue = IpVersion.IPV4) ?: IpVersion.IPV4
+        // AUTO is IPv4-first now (see the DNS overrides), so it is both the safe
+        // default and the value the settings flow below publishes.
+        YouTube.ipVersion = settings[IpVersionKey]?.toEnum(defaultValue = IpVersion.AUTO) ?: IpVersion.AUTO
 
         val channel = NotificationChannel(
             "updates",
