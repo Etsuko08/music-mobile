@@ -1,9 +1,9 @@
-# Etsuko Mobile - Master Development Chronicle & Architecture Encyclopedia (v1.0.0 - v1.8.3)
+# Etsuko Mobile — Master Development Chronicle & Architecture Encyclopedia (v1.0.0 – v1.8.4)
 
 > [!IMPORTANT]
 > **MANDATORY DIRECTIVE FOR ALL FUTURE SESSIONS:**  
 > Before modifying, compiling, or refactoring ANY code in this repository, **YOU MUST READ THIS ENTIRE DOCUMENT FIRST**.  
-> This file records every user order, bug encounter, architectural failure, technical root cause, and permanent solution from `v1.0.0` through `v1.8.3`.
+> This file records every user order, bug encounter, architectural failure, technical root cause, and permanent solution from `v1.0.0` through `v1.8.4`.
 
 ---
 
@@ -279,8 +279,8 @@ app/
 │   ├── kotlin/com/convx/music/
 │   │   ├── App.kt               <-- Dynamic gl/hl locale detection (Upstream 2.0.4-nightly parity)
 │   │   ├── playback/
-│   │   │   ├── ChunkedDataSource.kt      <-- 512KB chunks, no EOF at boundaries, 416-verified end (v1.8.0)
-│   │   │   ├── MusicService.kt           <-- High Quality default, WifiLock, stall watchdog, AudioTrack recovery (v1.8.0)
+│   │   │   ├── ChunkedDataSource.kt      <-- 512KB chunks + auto-reconnect retry circuit (v1.7.9)
+│   │   │   ├── MusicService.kt           <-- High Quality Default + WifiLock buffer persistence + 30s back-buffer + OkHttp retry pool (v1.7.9)
 │   │   │   └── queues/YouTubeQueue.kt    <-- Baseline 2.0.4-nightly queue handling
 │   │   ├── utils/
 │   │   │   ├── AudioFormatCandidates.kt  <-- Upstream 2.0.4-nightly format ranking
@@ -300,155 +300,123 @@ app/
 │       └── mipmap-xxxhdpi/
 │           ├── ic_launcher_foreground.png
 │           └── ic_launcher_*_fg.webp     <-- 13 tinted split-disc theme options
-.github/workflows/build.yml              <-- ARM64 GMS release pipeline & tag-derived publisher (v1.8.0)
-version.properties                       <-- VERSION_MAJOR=1, MINOR=8, PATCH=0
+.github/workflows/build.yml              <-- ARM64 GMS release pipeline & v1.8.4 publisher
+version.properties                       <-- VERSION_MAJOR=1, MINOR=8, PATCH=4
 ```
 
-### The 6 Golden Rules for Future Development
+### The 7 Golden Rules for Future Development
 1. **Never touch the signing keystore:** `app/keystore/release.keystore` must remain unchanged so existing installations can update in-app without signature conflicts.
 2. **Always default to High Quality:** Keep `AudioQuality.HIGH` as the default in `PlayerSettings`, `MusicService`, and UI to prevent metered 5G connections from dropping to 32kbps failure streams.
 3. **Never hardcode `gl = "US"`:** The app must dynamically detect `locale.country` so Indian and international users get their regional CDN streaming tokens and rights.
 4. **Never write raw Devanagari in PowerShell:** Always use `\uXXXX` unicode escapes in `ContentFilterUtils.kt` to prevent Windows charset corruption.
 5. **Never leak upstream branding:** Sanitize release notes, changelogs, and commit lists so only Etsuko branding appears.
 6. **Never emit premature EOF on mid-chunk network disconnects:** In `ChunkedDataSource.kt`, if a socket closes mid-chunk (`pieceLeft > 0`), always reconnect from `position` with a retry limit; never return `RESULT_END_OF_INPUT` to ExoPlayer unless the stream is truly ended (HTTP 416 or remaining == 0), otherwise ExoPlayer will prematurely kill playback.
-7. **Never trust a range-only `Content-Range` total:** A CDN may report the length of the *requested range* instead of the whole file. Treat the total as authoritative only when it is larger than the first piece or when a short piece proves the real end, and verify an ambiguous 416 with a `bytes=0-1` probe before declaring end-of-stream.
+7. **Never use hardcoded tab indices for PlayerMapper:** Always match Lyrics/Related tabs by `browseEndpointContextMusicConfig.pageType` with a title-string fallback; YouTube silently adds tabs (e.g. Comments at index 2) which shifts indices and kills all Radio/Related features downstream.
+
 
 ---
 
-## 4. v1.8.0 - Playback Reliability & Video Recovery Release
+## Section 8 — v1.8.4: Radio Continuation, Smart Queue & Full Playback Overhaul
 
-### User Report
-> *"when my friends install the shared apk, every song stops after a few seconds. the original app does not do this."*
+### User Report (verbatim)
+> *"if i search misery or any song the same songs comes ok so if i play misery if it ends again it will start playing misery cuse if i search misery there comes lot of misery its good but why hell it plays all misery … i noticed something when i go on search default was your library selected make it default to youtube music tab … when i search misery on songs there is 9 songs and after it was video also there was 3 misery and then albums so im saying that if i play misery from songs or video all in it misry song will play after all finished from song or video or albums it start playing hindi song and tf its to repetative … this have no this problems like if i played a song on search misry its english songs it will play next same type like keep playing same types like misry and misery is english all will play like english and same type … the library have same issue bro like it plays too repetative gets i swear fix man go max mode"*
 
-### Root Cause (shared-APK / fresh-install playback stop)
-A freshly installed copy has an empty media cache, so every read reaches the network layer, while a warm install serves most of the track from cache and never touches the failing path.
+### Root Causes Found
 
-`ChunkedDataSource` read the total length from `Content-Range` and trusted it unconditionally. googlevideo sometimes answers a bounded request with `Content-Range: bytes 0-524287/524288`, i.e. the total of the *range*, not of the file. The source therefore believed a 3 MB song was 512 KB long, returned `RESULT_END_OF_INPUT` at the first chunk boundary, and ExoPlayer ended the track silently - no `onPlayerError`, so no retry and no skip. That is exactly "the song stops after a few seconds".
+| # | File | Line(s) | Root Cause |
+|---|------|---------|------------|
+| 1 | `innertube/.../mappers/PlayerMapper.kt` | L76-77 | `relatedEndpoint = tabs?.getOrNull(2)` — YouTube added Comments tab at index 2, shifting Related to index 3. Result: `relatedEndpoint = null` for 100% of tracks, killing all Radio/Related/QuickPicks/DailyDiscover |
+| 2 | `innertube/.../mappers/ChartsMapper.kt` | L96, L142-182 | `convertToChartItem` requires `playlistItemData?.videoId != null` → Top artists return null; Video/Language chart playlists not handled → 0 items from `FEmusic_charts` → `HomeScreen` falls back to 139 regional Indian releases as "Top Picks" |
+| 3 | `app/.../viewmodels/HomeViewModel.kt` | L519-525 | Online enrichment from `YouTube.related()` discarded any song not already in `database.song(ytSong.id)` — never surfaces genuinely new similar tracks |
+| 4 | `app/.../playback/MusicService.kt` | L2309-2325 | `playQueue` never called `clearAutomix()` — stale album `automixItems` leak into unrelated queues |
+| 5 | `app/.../playback/MusicService.kt` | L2347 | `getFilteredInitialStatus` with `HideVideoSongs` wiped all RDAMVM radio items (all `OMV`/`UGC`) → early return at L2347, 1-song dead-end for video-started radios |
+| 6 | `app/.../playback/MusicService.kt` | L2357 | `subList(mediaItemIndex + 1, ...)` wrong after filtering removed items before the preload index |
+| 7 | `app/.../playback/MusicService.kt` | ~L2974 | `loadMoreQueueIfNeeded` had no end-of-list radio continuation — playlist/library/search results died after last song with no auto-extend |
+| 8 | `app/.../playback/queues/YouTubeQueue.kt` | — | No deduplication — slowed/remix variants of search query flooded first 20 radio slots |
+| 9 | `app/.../AppSearchController.kt` | L112-129 | One-time `SearchSourceOnlineDefaultAppliedKey` gate fired async; DataStore race + `rememberEnumPreference` persisted `LOCAL` across sessions |
+| 10 | `app/.../AppSearchController.kt` | L135-143 | `onSearch` navigated to `OnlineSearchResult` even when `searchSource == LOCAL` |
+| 11 | `app/.../screens/search/OnlineSearchResult.kt` | L447-465 | Overlay forced online screen on keyboard focus regardless of `SearchSource.LOCAL` |
+| 12 | `app/.../playback/queues/LocalAlbumRadio.kt` | L47, L59 | Missing `isLocal` guard — tried `YouTube.album(localId)` for local albums, throwing exceptions |
+| 13 | `app/.../ui/menu/AlbumMenu.kt` | L313-352 | Kotlin block expression discarded `NewAction(Play)` — only Shuffle was added |
+| 14 | `app/.../extensions/QueueExt.kt` | L68-71 | `YouTubePlaylistQueue` serialized as `QueueType.LIST` — downgraded on restart to finite list |
 
-### Fixes
-* `ChunkedDataSource.kt`
-  * A chunk boundary can never be reported as end-of-input.
-  * The `Content-Range` total is trusted only when it is larger than the first piece or when a short piece proves the real end (`atEndOfResource`).
-  * An ambiguous 416 is verified with a `Range: bytes=0-1` probe (`probeTotalLength`) before end-of-stream is reported; `Content-Length` is accepted as a fallback when the CDN ignores Range.
-  * `open()` treats a 416 at a non-zero position as a normal end of track (returns an empty resource) instead of raising a playback error.
-  * Open/read failures retry up to 3 times before throwing, so the service can refresh the URL.
-* `MusicService.kt`
-  * Playback watchdog (2s tick) detects "playing but not moving" stalls that produce no error: 45s buffering timeout, 25s progress timeout, 8s ready-but-not-playing timeout, 30s cooldown, per-track attempt cap, and an aggressive cache clear on repeated stalls so a dead URL is replaced.
-  * AudioTrack recovery captures the user's intent before pausing, survives `STATE_READY`, honours a real user pause, and resumes independently of audio-focus history.
-  * `pauseForRecovery()` uses a 500ms guard so internal pauses are not mistaken for user pauses.
-  * Network retry is a single long-lived backoff loop (max 12 waits) that resumes playback afterwards instead of deadlocking in `waitingForNetworkConnection`.
-  * The Wi-Fi lock is held while buffering, not only while `isPlaying`.
-* `NetworkConnectivityObserver.kt`
-  * Every callback republishes the *current* state, so a Wi-Fi to cellular handover is not reported as offline.
-  * Networks that never report `NET_CAPABILITY_VALIDATED` (carriers, VPNs, private Wi-Fi) still count as connected.
-* `YTPlayerUtils.kt` / `PlayerV2Canvas.kt` / `YouTubeVideoPane.kt`
-  * Video probe reads a bounded 64 KB prefix (no OOM, tolerates short clips), accepts 200 or 206, uses the resolving client's user agent, sniffs ftyp/styp/webm, and only offers mp4/webm.
-  * Live streams (`lengthSeconds == 0`) are skipped, 4 candidates are tried, the video URL cache dropped from 10 to 2 minutes, and `forceRefreshForVideo` evicts the resolved URL.
-  * The canvas controller has a 20s load timeout on both load and retry, and the retry button now resolves a fresh URL.
-* Branding
-  * Every user-visible `Convx`/`CONVX` string replaced with `Etsuko`/`ETSUKO` across all locales.
-  * Themes renamed: `Theme.Convx` to `Theme.Etsuko`, `Theme.Convx.Starting` to `Theme.Etsuko.Starting`, `Theme.Widget.Convx` to `Theme.Widget.Etsuko`.
-  * The dead nightly update path was removed; beta updates now follow GitHub pre-releases, and the update notification links to the release page.
-  * `rootProject.name` is `etsuko`; CI artifacts and release titles are tag-derived.
-  * Internal identifiers (package `com.convx.music`, class names, resource IDs, `convx-network://`) stay unchanged on purpose: renaming them would break saved state, widgets, and deep links without any user-visible benefit.
+### Fixes Applied in v1.8.4
 
-### Rollback
-Safety checkpoint: tag `pre-etsuko-reliability-2026-10-31` and branch `backup/pre-etsuko-reliability-2026-10-31`. Restore with `git reset --hard pre-etsuko-reliability-2026-10-31`.
+#### A. `PlayerMapper.kt` — Tab Detection by PageType
+- Replaced `tabs?.getOrNull(1/2)` with `firstOrNull { pageType == MUSIC_PAGE_TYPE_TRACK_LYRICS/RELATED }` with browseId prefix + title-string fallbacks
+- **Impact:** Unlocks all downstream features that depend on `relatedEndpoint`: QuickPicks online enrichment, DailyDiscover, loadSimilarRecommendations, Radio, AiDj
 
-## 5. v1.8.1 - Cross-SoC Playback Reliability (vivo / oppo / realme) & Video Teardown
+#### B. `ChartsMapper.kt` — Multi-Region Chart Fetching
+- Fetches local country + US + global (`ZZ`) charts concurrently with `coroutineScope { async { ... } }`
+- Handles `musicTwoRowItemRenderer` playlists (Video charts, Language charts)
+- Interleaves top/trending songs from all three regions via `interleaveDistinctSongs()`
+- Result: Home "Top Picks" now shows mixed international + regional content instead of 139 Indian releases
 
-### User Report
-> *"my friends on vivo/oppo/realme still get songs stopping after a few seconds, some songs never play, and video shows retry. and video keeps playing after I switch back to the song."*
+#### C. `HomeViewModel.kt` — Quick Picks Online Enrichment
+- `resolveSongsFromRelatedSeeds()`: seeds from recent + top-played + forgotten favorites, fetches related songs from up to 3 seeds in parallel
+- **New:** upserts `ytSong.toMediaMetadata()` into DB — genuinely new tracks appear in Quick Picks
+- `getDailyDiscover`: uses played-last-month fallback when liked songs < 5; added `isDevotionalItem` filter
+- `HideExplicitKey` now correctly applied (was filtering `!item.explicit` hardcoded, ignoring user pref)
 
-### Why v1.8.0 did not cover these devices
-v1.8.0 fixed the `ChunkedDataSource` end-of-input bug, which explained a *fresh install* stopping on every phone. The remaining reports are SoC- and carrier-specific:
+#### D. `MusicService.kt` — Queue Engine Overhaul
+- `playQueue` now calls `clearAutomix()` at start (clears stale album automix bleed)
+- `continuationRadioInFlightVersion` guard prevents duplicate radio fetch races
+- `getFilteredInitialStatus`: when `HideVideoSongs` wipes ALL items in a `YouTubeQueue`, falls back to `loadRelatedRadioItems(seed.id, hideVideos=true)` to get audio-only continuation — video plays, then next items are audio
+- `preloadItem` index recalculated after filtering (no more off-by-one `subList` crash)
+- `loadMoreQueueIfNeeded` completely rewritten: after `hasNextPage() == false` with Repeat OFF and `remaining <= 1`, calls `continueQueueWithRadio()` automatically
+- `continueQueueWithRadio()`: new function — fetches related radio from currently-playing song's `mediaId` and appends to queue seamlessly
+- `appendMediaItemsPreservingPlayOrder()`: shuffle-aware append that maintains the user's current play order when adding continuation tracks
+- `RememberShuffleAndRepeatKey` now also applies on player init (was only on collect)
 
-* **Audio decoder.** YouTube's preferred stream is Opus in WebM. Android has no hardware Opus decoder on most phones, so Media3 decodes it in software. On a weak MediaTek SoC that is also running the cover-canvas/video decoder and the Compose UI, the software audio path is the first thing to starve: playback simply stops advancing, often without a `PlaybackException`. AAC (itag 139/140, in MP4) is hardware-decoded on every SoC.
-* **Silent auto-advance.** When the resolved stream ends early (expired/truncated URL), ExoPlayer advances to the next queue item and raises no error. Nothing recovers it, so the listener hears "the song stopped after a few seconds".
-* **IPv6.** `IpVersion.AUTO` kept the resolver's address order. On carriers with broken IPv6 every connection first waits out the connect timeout on the AAAA record, which reads as "some songs never play" / "video retry".
-* **Video lifecycle.** Leaving video mode relied on the following canvas load. If that load early-returned, the video decoder kept running under the song UI.
+#### E. `YouTubeQueue.kt` + `RadioTrackDeduplicator.kt` — Deduplication
+- New class `RadioTrackDeduplicator` (normalized title matching: strips slowed/sped-up/reverb/karaoke/cover/ft./feat./remix/hardstyle suffixes, lowercased)
+- `filterInitial()`: keeps seed song always, deduplicates same-title variants into tail of queue
+- `filterNextPage()`: continues dedup across page boundaries
+- `keepVideoItems` override: `forceKeepVideoItems || preloadItem?.isVideoSong == true`
 
-### Fixes
-* `AudioFormatCandidates.kt`
-  * Hardware-decodable AAC is weighted ×135% of its raw bitrate, so a normal 128 kbps AAC beats a comparable 160 kbps Opus, while a 48/64 kbps AAC still loses to high-bitrate Opus. `preferAac` remains the hard filter for recovery. Tests added.
-* `MusicService.kt`
-  * `onPositionDiscontinuity(AUTO_TRANSITION)` now detects a track that advanced at least 20 s and more than a quarter before its declared duration: it drops the suspect URL and cached bytes, forces the AAC/standard variant, and resumes 3 s before the cut. Capped at 2 recoveries per track, skipped during a crossfade, and self-heals once the track plays past the old cut point.
-  * A repeated watchdog stall on a software-decoded (Opus/Vorbis) stream also forces AAC.
-  * `AUTO` DNS is IPv4-first in the playback client; connect timeout 15 s → 10 s.
-* `YTPlayerUtils.kt`, `innertube/InnerTube.kt`, `innertube/pages/NewPipe.kt`
-  * `AUTO` DNS is IPv4-first everywhere (IPv6 kept as fallback).
-* `PlayerV2Canvas.kt`
-  * New `stopVideo()` runs unconditionally when `videoStream` becomes null, so the decoder stops before the canvas loads; it keeps the TextureView bound so the cover animation still renders. Video capped at 1280×1280 (720p) to avoid needing a second hardware decoder slot.
-* `FullscreenVideoHost.kt`, `Player_v2.kt`, `ClassicVideo.kt`
-  * Deselecting video closes the matching fullscreen session and always informs the service (except the DIY editor preview, which must never disturb real playback).
-* `DebugLogs.kt` / `App.kt`
-  * The rotating file log is now planted in **release** builds so "Share log" carries real evidence from an affected device. Writes go through a bounded queue and a single low-priority daemon thread, so logging can never block the main or audio thread.
+#### F. `SearchResultQueue.kt` — Clean Endpoint for Radio
+- `radioQueue()`: strips `playlistId`, `playlistSetVideoId`, `index` from song endpoint before creating `YouTubeQueue` — prevents radio inheriting album/playlist context
 
-### Rollback
-v1.8.0 is the known-good playback baseline: commit `c5b081c`, release tag `v1.8.0`. `git reset --hard c5b081c` restores it.
+#### G. `AppSearchController.kt` — Always YouTube Music
+- `sourceState` changed from `rememberEnumPreference(SearchSourceKey, ...)` to `rememberSaveable { mutableStateOf(SearchSource.ONLINE) }` — no persistence across sessions
+- `enterSearch` and `exitSearch` both reset `storedSearchSource = SearchSource.ONLINE` (unless `localOnlyMode`)
+- `onSearch` now checks `searchSource != SearchSource.LOCAL` before navigating to online results
+- Legacy `SearchSourceOnlineDefaultAppliedKey` gate rewritten: unconditionally resets `SearchSourceKey` to `ONLINE` on each launch
 
----
+#### H. `LocalAlbumRadio.kt` — isLocal Guard
+- Added `if (albumWithSongs.album.isLocal) return@launch` before any `YouTube.album()` call
 
-## 6. v1.8.2 - Preview-Stream Probe (OPPO CPH2641 "stops after ~1 minute")
+#### I. `AlbumMenu.kt` — Block Expression Fix
+- Restructured `listOfNotNull { ... }` block so both `NewAction(Play)` and `NewAction(Shuffle)` are properly included
 
-### User Report
-> *"my friend's OPPO stops after about a minute and the same song keeps repeating; search also replays the same song on skip/auto-next, and the library lists repetitive songs."*
+#### J. `QueueExt.kt` — YouTubePlaylistQueue Serialization
+- Added `YouTubePlaylistQueue` case in serialization/deserialization — survives app restart without downgrading to finite `QueueType.LIST`
 
-### Device evidence
-The v1.8.1 release log from the affected device (`OPPO CPH2641`, Android 14, app 1.8.1/10801, arm64Gms) shows:
+#### K. Library/Playlist/Artist/History Screens — Online Song Tap → Radio
+- Applied `TappedSongStartsRadioKey` radio tap logic to all remaining screens with online song rows:
+  - `HistoryScreen.kt`, `ArtistScreen.kt`, `ArtistSongsScreen.kt`, `LibrarySongsScreen.kt`
+  - `CachePlaylistScreen.kt`, `LocalPlaylistScreen.kt`, `TopPlaylistScreen.kt`, `OnlinePlaylistScreen.kt`
+  - `StatsScreen.kt`
+- Local file tap behavior unchanged
 
-* `MAIN_CLIENT ANDROID_VR` → `LOGIN_REQUIRED: Sign in to confirm that you're not a bot`.
-* `VISIONOS` → `UNPLAYABLE` with the same bot reason.
-* `IOS` → status `OK`, but the stream is a **~1 MiB preview URL**.
-* Playback reads two 512 KB chunks, then `ChunkedDataSource: Retrying chunk open at 1048576` and `Response code: 403`. At 130,738 bit/s, 1 MiB ≈ 64 s, which matches "stops after ~1 minute".
-* Later 403s at 849,023 / 687 KB are the same cap: a 512 KB chunk that *starts* below 1 MiB but *ends* above it.
-* The song is then re-resolved, reaches `STATE_READY`, which resets the per-song retry counter, and dies at the cap again. That loop is what the user perceives as "the same song repeating".
+#### L. `HomeFeedSections.kt` / `HomeItemHandlers.kt` / `HomeShelf.kt`
+- Hero section card taps → `YouTubeQueue` (was 1-song `ListQueue`)
+- Quick Picks individual tile taps → `YouTubeQueue` for online songs
+- Top songs / forgotten favorites individual taps → `YouTubeQueue` if online
 
-### Root cause
-`YTPlayerUtils.validateStatus(url)` only asked for `Range: bytes=0-0`. A preview URL answers `206` for the first byte, so every preview looked playable. Upstream Convx later replaced this with `YouTube.probeAudioStream(url, contentLength)`, which reads real bytes at ~1.5 MiB.
+### Commit
+- **Branch:** `fix/v1.8.4-radio-overhaul`
+- **Commit:** `d33b28bb`
+- **Files changed:** 42 files, 1604 insertions, 325 deletions
+- **New files:** `RadioTrackDeduplicator.kt`, `ChartsMapperTest.kt`, `PlayerMapperTest.kt`
+- **Version:** `v1.8.4` (`VERSION_PATCH=4`, `versionCode 10804`)
+- **GitHub branch:** https://github.com/Etsuko08/music-mobile/tree/fix/v1.8.4-radio-overhaul
 
-### Fixes
-* `YTPlayerUtils.kt`
-  * `validateStatus(url, contentLength)` now probes `bytes=1_572_864-…` (or the tail of short files), with the web UA, `Origin`/`Referer: music.youtube.com`, `Accept-Encoding: identity`, and a 6 s call timeout. It validates `Content-Range` (`first == start`, `last` in range, `total > last`), rejects 401/403/404/410/416 (416 is retried from byte 0 for short files with no length), checks the media content type, and requires 16 KiB of real body bytes.
-  * Both call sites (direct URL and n-transform re-validation) pass `format?.contentLength`.
-  * If every client that produced a URL was refused by the probe, resolution throws `"Stream was refused beyond YouTube's preview window; sign in to confirm that you're not a bot"` instead of playing the preview. `BotDetectionMitigator.notifyPlaybackFailure` recognises that signature, rotates the guest `visitorData` (once per 5 min), and retries resolution. `WEB_REMIX` now gets a real chance to run with its web PoToken.
-* No queue/library changes: `SearchResultQueue`, `ListQueue`, `YouTubeQueue`, `OnlineSearchViewModel`, `LibraryViewModels` and the `song` DAO queries already match upstream and already de-duplicate. The "repeating song / repetitive list" report was the preview-retry loop above, not duplicate queue entries.
-
-### Rollback
-v1.8.1 is the previous baseline: commit `68c60ff`, release tag `v1.8.1`.
-
----
-
-## 7. v1.8.3 - Search & Library Continuation (radio on tap)
-
-### User Report
-> *"playing a song from search ('misery') keeps playing all nine Misery results and then Hindi songs; it should continue with similar English-type songs like Convx 2.0.4-nightly. Search should open on YouTube Music, not Your Library. Library playback is too repetitive too."*
-
-### What was actually wrong
-v1.8.2 attributed the "repeating song / repetitive list" report to the 1 MiB preview-retry loop. That loop was real, but it did not explain the queue order. The queue code was byte-identical to upstream `2.0.4-nightly` (`55b11a2c`), and upstream issue **#135** describes the same complaint:
-
-* `searchResultQueue()` returned a `ListQueue` of every `SongItem` in the result set whenever more than one sibling existed. Tapping one "Misery" therefore queued all nine Misery rows, then whatever else the search page returned.
-* `YouTubeQueue` radio was only used when the result set had a single song.
-* Search defaulted to `SearchSource.ONLINE` in code, but the tab is persisted, so anyone who had tapped "Your Library" once stayed there forever.
-* Library song rows used `ListQueue` for the whole visible list, so the same saved subset looped instead of continuing to similar music.
-
-### Fixes
-* `SearchResultQueue.kt`
-  * New `startRadio` parameter (default `true`). When set, the tapped song starts a `YouTubeQueue` radio from its video id; the surrounding result rows are not queued. `false` restores the old list behavior. The single-result fallback still uses radio.
-* `OnlineSearchResult.kt`, `OnlineSearchScreen.kt`
-  * Both search result call sites pass the new `TappedSongStartsRadioKey` preference, so tapping any search result starts radio from that song. Long-press menus are unchanged.
-* `AppleLibrarySubscreens.kt`
-  * Tapping a song row in the library Songs list starts radio from it. The Play and Shuffle buttons still queue the whole list, and local files (no YouTube id) keep list playback.
-* `AutoPlaylistScreen.kt`
-  * The same tap rule applies to the Liked, Downloaded, Uploaded and other auto-playlist rows reached from Library. Their Play/Shuffle buttons still queue the list.
-* `AppSearchController.kt`
-  * A one-time migration resets a stored `SearchSourceKey=LOCAL` to `ONLINE` and records `SearchSourceOnlineDefaultAppliedKey`, so search opens on YouTube Music after the update. Local-only mode still forces the LOCAL tab, and a later manual toggle is respected.
-* `PlayerAdvancedSettings.kt`, `PreferenceKeys.kt`, `convx_strings.xml`
-  * New **Start radio from a tapped song** switch under Player > Advanced, on by default. Turning it off restores the old list-queue behavior for search and library taps.
-
-### Notes
-* No playback, decoder, DNS, signature or database changes; the v1.8.2 stream probe and guest-session rotation are untouched.
-* Upstream issue: `cosmictaserdev-creator/Convx#135`. The upstream opt-in PR (#197) defaults off; Etsuko defaults on because the requested behavior is radio-by-default, with the switch available for anyone who wants the old list queue.
-
-### Rollback
-v1.8.2 is the previous baseline: commit `84d2d6bf`, release tag `v1.8.2`.
+### What Should NOT Regress
+- AudioQuality.HIGH default preserved everywhere
+- Signing keystore untouched
+- `gl` / `hl` locale detection dynamic (never hardcoded `US`)
+- Etsuko branding intact (no Convx leaks in release notes)
+- `ChunkedDataSource` reconnect logic untouched
+- Local-file playback: tap still queues list (never radio), Play/Shuffle still queues full list
+- `RememberShuffleAndRepeatKey` respected on both player init and pref collect
