@@ -91,7 +91,7 @@ jobs:
             APK_SIZE_MB=$((APK_SIZE / 1048576))
             echo "APK: $APK_PATH ($APK_SIZE_MB MB) as $TAG"
 
-            NOTES="Etsuko Mobile v${VERSION_NAME} - Playback fix for devices YouTube treats as automated: the player now verifies that a stream really serves audio past the first megabyte instead of trusting a 1 MiB preview URL, so songs no longer stop after about a minute and restart forever. When every stream is preview-only, the guest session is refreshed once and resolution is retried. Includes all v1.8.1 reliability work: hardware AAC preference, early-end recovery, IPv4-first DNS, and video teardown."
+            NOTES="Etsuko Mobile v${VERSION_NAME} - Search and library now behave like radio: tapping a song continues with similar music instead of replaying every same-named search result or walking the same library list. Search also opens on YouTube Music again even if an older build left it on Your Library. Play/Shuffle still queue the whole list, local files stay list-based, and a new Player > Advanced switch (on by default) restores list playback if you prefer it. Includes all v1.8.2 playback fixes."
             gh release create "$TAG" "etsuko-mobile.apk" \
               --repo "${{ github.repository }}" \
               --title "Etsuko Mobile $TAG" \

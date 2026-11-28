@@ -84,6 +84,7 @@ import com.convx.music.R
 import com.convx.music.constants.MiniPlayerBottomSpacing
 import com.convx.music.constants.MiniPlayerHeight
 import com.convx.music.constants.NavigationBarHeight
+import com.convx.music.constants.TappedSongStartsRadioKey
 import com.convx.music.playback.queues.searchResultQueue
 import com.convx.music.ui.component.ChipsRow
 import com.convx.music.ui.component.EmptyPlaceholder
@@ -106,6 +107,7 @@ import com.convx.music.ui.menu.YouTubeArtistMenu
 import com.convx.music.ui.menu.YouTubePlaylistMenu
 import com.convx.music.ui.menu.YouTubeSongMenu
 import com.convx.music.utils.listItemShape
+import com.convx.music.utils.rememberPreference
 import com.convx.music.viewmodels.OnlineSearchViewModel
 import kotlinx.coroutines.launch
 import java.net.URLDecoder
@@ -180,8 +182,10 @@ fun OnlineSearchResult(
         }
     }
 
-    // Sibling results let a song tap queue this result set instead of starting one-song radio.
+    // Radio is the default: the result rows stay on screen, but Up next follows the tapped song
+    // instead of walking through every same-named result and then unrelated languages.
     val searchedSongsTitle = stringResource(R.string.queue_searched_songs)
+    val (tappedSongStartsRadio) = rememberPreference(TappedSongStartsRadioKey, defaultValue = true)
     val ytItemContent: @Composable LazyItemScope.(YTItem, Int, List<YTItem>) -> Unit = { item: YTItem, index: Int, siblings: List<YTItem> ->
         val size = siblings.size
         val longClick = {
@@ -243,7 +247,14 @@ fun OnlineSearchResult(
                                 if (item.id == mediaMetadata?.id) {
                                     playerConnection.togglePlayPause()
                                 } else {
-                                    playerConnection.playQueue(searchResultQueue(item, siblings, searchedSongsTitle))
+                                    playerConnection.playQueue(
+                                        searchResultQueue(
+                                            item,
+                                            siblings,
+                                            searchedSongsTitle,
+                                            startRadio = tappedSongStartsRadio,
+                                        ),
+                                    )
                                 }
                             }
 

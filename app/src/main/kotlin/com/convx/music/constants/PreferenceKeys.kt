@@ -267,6 +267,13 @@ val AutoSkipNextOnErrorKey = booleanPreferencesKey("autoSkipNextOnError")
 val StopMusicOnTaskClearKey = booleanPreferencesKey("stopMusicOnTaskClear")
 val ShufflePlaylistFirstKey = booleanPreferencesKey("shufflePlaylistFirst")
 val PreventDuplicateTracksInQueueKey = booleanPreferencesKey("preventDuplicateTracksInQueue")
+
+/** Tapping a song in search or the library starts a radio from it instead of queuing the list. */
+val TappedSongStartsRadioKey = booleanPreferencesKey("tappedSongStartsRadio")
+
+/** One-time reset of a stored "Your Library" search tab back to YouTube Music. */
+val SearchSourceOnlineDefaultAppliedKey = booleanPreferencesKey("searchSourceOnlineDefaultApplied")
+
 val AskBeforeReplacingQueueKey = booleanPreferencesKey("askBeforeReplacingQueue")
 val CrossfadeEnabledKey = booleanPreferencesKey("crossfadeEnabled")
 val CrossfadeDurationKey = floatPreferencesKey("crossfadeDuration")
