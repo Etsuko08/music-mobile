@@ -909,6 +909,10 @@ object YTPlayerUtils {
         var streamExpiresInSeconds: Int? = null
         var streamPlayerResponse: PlayerResponse? = null
         var retryMainPlayerResponse: PlayerResponse? = if (usedAgeRestrictedClient != null) mainPlayerResponse else null
+        // True when at least one client returned a stream URL that the probe
+        // refused. YouTube only does that for preview/limited URLs, so an
+        // all-clients-rejected result is a bot challenge, not a dead track.
+        var rejectedUnvalidatedStream = false
 
         val currentStatus = mainPlayerResponse.playabilityStatus.status
         val isAgeRestricted = isAgeRestrictedStatus(currentStatus)
@@ -1043,12 +1047,13 @@ object YTPlayerUtils {
                     break@clientLoop
                 }
 
-                if (validateStatus(streamUrl)) {
+                if (validateStatus(streamUrl, format?.contentLength)) {
                     Timber.tag(logTag).d("Stream validated successfully with client: ${currentClient.clientName}")
                     PlaybackLogManager.log(PlaybackLogLevel.INFO, "Stream validated", currentClient.clientName)
                     Timber.tag(TAG).i("Playback: client=${currentClient.clientName}, videoId=$videoId")
                     break@clientLoop
                 } else {
+                    rejectedUnvalidatedStream = true
                     Timber.tag(logTag).d("Stream validation failed for client: ${currentClient.clientName}")
 
                     // For web clients: try alternate n-transform and re-validate (Zemer approach)
@@ -1059,7 +1064,7 @@ object YTPlayerUtils {
                             val nTransformed = CipherDeobfuscator.transformNParamInUrl(streamUrl)
                             if (nTransformed != streamUrl) {
                                 Timber.tag(logTag).d("CipherDeobfuscator n-transform applied, re-validating...")
-                                if (validateStatus(nTransformed)) {
+                                if (validateStatus(nTransformed, format?.contentLength)) {
                                     Timber.tag(logTag).d("N-transformed URL VALIDATED OK!")
                                     streamUrl = nTransformed
                                     nTransformWorked = true
@@ -1096,6 +1101,17 @@ object YTPlayerUtils {
                 null,
                 PlaybackException.ERROR_CODE_REMOTE_ERROR
             )
+        }
+
+        // Every client that produced a URL was refused past YouTube's preview
+        // window. That is the bot challenge, and the caller rotates the guest
+        // identity before retrying instead of playing a minute of audio.
+        if (rejectedUnvalidatedStream && streamUrl == null) {
+            val detail = "Stream was refused beyond YouTube's preview window; " +
+                "sign in to confirm that you're not a bot"
+            Timber.tag(logTag).e(detail)
+            PlaybackLogManager.log(PlaybackLogLevel.BOT, "Preview-only streams", detail)
+            throw PlaybackException(detail, null, PlaybackException.ERROR_CODE_REMOTE_ERROR)
         }
 
         if (format == null) {
@@ -1159,32 +1175,139 @@ object YTPlayerUtils {
             .onFailure { Timber.tag(logTag).e(it, "Failed to fetch metadata") }
     }
 
-    private fun validateStatus(url: String): Boolean {
-        Timber.tag(logTag).d("Validating stream URL status")
-        try {
-            // Use a one-byte ranged GET: YouTube can accept HEAD for a stream it won't serve.
-            val requestBuilder = okhttp3.Request.Builder()
-                .get()
-                .url(url)
-                .header("Range", "bytes=0-0")
-                .header("User-Agent", YouTubeClient.USER_AGENT_WEB)
-
-            // Do NOT add Cookie header — googlevideo.com CDN rejects account cookies with 403.
-            // Stream URLs are already authenticated via signed URL parameters.
-
-            // use {} rather than leaking the (1-byte) body back into the pool unread.
-            // 206 is the honoured range; a server that ignores Range answers 200. Both
-            // mean bytes are being served, which is the only thing this asks.
-            val (isSuccessful, code) = httpClient.newCall(requestBuilder.build()).execute()
-                .use { it.isSuccessful to it.code }
-            Timber.tag(logTag).d("Stream URL validation result: ${if (isSuccessful) "Success" else "Failed"} ($code)")
-            return isSuccessful
+    /**
+     * Checks that [url] serves real media beyond YouTube's ~1 MiB "unvalidated"
+     * preview window.
+     *
+     * A `bytes=0-0` probe is not enough: googlevideo answers 206 for the first
+     * byte of a preview URL, then returns 403 once playback crosses the preview
+     * boundary about a minute in. Probing at 1.5 MiB and reading real body bytes
+     * rejects those URLs so the caller can move on to a client that returns a
+     * fully authorized stream.
+     */
+    private fun validateStatus(url: String, contentLength: Long?): Boolean {
+        Timber.tag(logTag).d("Validating stream URL status (contentLength=$contentLength)")
+        val length = contentLength?.takeIf { it > 0L }
+        val start = length?.let { minOf(PROBE_OFFSET_BYTES, (it - PROBE_READ_BYTES).coerceAtLeast(0L)) }
+            ?: PROBE_OFFSET_BYTES
+        val end = minOf(start + PROBE_RANGE_BYTES - 1, length?.minus(1) ?: Long.MAX_VALUE)
+        return try {
+            when (probeStreamRange(url, start, end, length)) {
+                ProbeResult.Readable -> true
+                ProbeResult.Refused -> false
+                ProbeResult.RangeNotSatisfiable -> {
+                    // No length from the player response and the file is shorter
+                    // than the probe offset: ask for the start of the file instead.
+                    Timber.tag(logTag).d("Stream URL probe hit 416 at $start; retrying from byte 0")
+                    probeStreamRange(url, 0L, PROBE_RANGE_BYTES - 1, length) == ProbeResult.Readable
+                }
+            }
         } catch (e: Exception) {
             Timber.tag(logTag).e(e, "Stream URL validation failed with exception")
             reportException(e)
+            false
         }
-        return false
     }
+
+    private enum class ProbeResult { Readable, Refused, RangeNotSatisfiable }
+
+    private fun probeStreamRange(url: String, start: Long, end: Long, expectedLength: Long?): ProbeResult {
+        val request = okhttp3.Request.Builder()
+            .get()
+            .url(url)
+            .header("Range", "bytes=$start-$end")
+            .header("User-Agent", YouTubeClient.USER_AGENT_WEB)
+            .header("Origin", YouTubeClient.ORIGIN_YOUTUBE_MUSIC)
+            .header("Referer", YouTubeClient.REFERER_YOUTUBE_MUSIC)
+            .header("Accept", "*/*")
+            .header("Accept-Encoding", "identity")
+            .build()
+
+        // Do NOT add a Cookie header: googlevideo.com rejects account cookies with 403.
+        // Stream URLs are already authenticated via their signed query parameters.
+        val call = httpClient.newCall(request)
+        call.timeout().timeout(PROBE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+        return call.execute().use { response ->
+            val code = response.code
+            if (code == 416) {
+                Timber.tag(logTag).d("Stream URL validation result: Range not satisfiable (416) at byte $start")
+                return@use ProbeResult.RangeNotSatisfiable
+            }
+            if (code in PROBE_REFUSED_CODES) {
+                Timber.tag(logTag).d("Stream URL validation result: Refused ($code) at byte $start")
+                return@use ProbeResult.Refused
+            }
+            if (code != 200 && code != 206) {
+                Timber.tag(logTag).d("Stream URL validation result: Unavailable ($code) at byte $start")
+                return@use ProbeResult.Refused
+            }
+
+            val mime = response.header("Content-Type").orEmpty().substringBefore(';').trim().lowercase()
+            if (mime.isNotEmpty() && !mime.startsWith("audio/") && mime !in PROBE_MEDIA_TYPES) {
+                Timber.tag(logTag).d("Stream URL validation result: Refused (content-type $mime)")
+                return@use ProbeResult.Refused
+            }
+
+            val available = if (code == 206) {
+                val header = response.header("Content-Range").orEmpty()
+                val match = CONTENT_RANGE_REGEX.matchEntire(header)
+                if (match == null) {
+                    Timber.tag(logTag).d("Stream URL validation result: Refused (bad Content-Range: $header)")
+                    return@use ProbeResult.Refused
+                }
+                val first = match.groupValues[1].toLongOrNull()
+                val last = match.groupValues[2].toLongOrNull()
+                val total = match.groupValues[3].toLongOrNull()
+                if (first != start || last == null || last < first || last > end ||
+                    (total != null && total <= last)
+                ) {
+                    Timber.tag(logTag).d(
+                        "Stream URL validation result: Refused (unexpected range $header for $start-$end)"
+                    )
+                    return@use ProbeResult.Refused
+                }
+                last - first + 1
+            } else {
+                response.header("Content-Length")?.toLongOrNull()?.takeIf { it > 0L } ?: expectedLength
+            }
+
+            val required = minOf(PROBE_READ_BYTES, available ?: PROBE_READ_BYTES).toInt()
+            val body = response.body
+            if (body == null) {
+                Timber.tag(logTag).d("Stream URL validation result: Refused (empty body)")
+                return@use ProbeResult.Refused
+            }
+            val buffer = ByteArray(required)
+            var received = 0
+            body.byteStream().use { stream ->
+                while (received < required) {
+                    val count = stream.read(buffer, received, required - received)
+                    if (count < 0) break
+                    received += count
+                }
+            }
+            if (received < required) {
+                Timber.tag(logTag).d(
+                    "Stream URL validation result: Unavailable ($code) at byte $start, " +
+                        "read=$received/$required"
+                )
+                return@use ProbeResult.Refused
+            }
+            Timber.tag(logTag).d(
+                "Stream URL validation result: Success ($code) at byte $start, read=$received/$required"
+            )
+            ProbeResult.Readable
+        }
+    }
+
+    /** YouTube caps unvalidated stream URLs at roughly the first megabyte. */
+    private const val PROBE_OFFSET_BYTES = 1_572_864L
+    private const val PROBE_RANGE_BYTES = 512L * 1024
+    private const val PROBE_READ_BYTES = 16L * 1024
+    private const val PROBE_TIMEOUT_MS = 6_000L
+    private val PROBE_REFUSED_CODES = setOf(401, 403, 404, 410)
+    private val PROBE_MEDIA_TYPES = setOf("video/mp4", "video/webm", "application/octet-stream")
+    private val CONTENT_RANGE_REGEX = Regex("bytes (\\d+)-(\\d+)/(\\d+|\\*)", RegexOption.IGNORE_CASE)
     data class SignatureTimestampResult(
         val timestamp: Int?,
         val isAgeRestricted: Boolean

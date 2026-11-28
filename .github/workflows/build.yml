@@ -91,7 +91,7 @@ jobs:
             APK_SIZE_MB=$((APK_SIZE / 1048576))
             echo "APK: $APK_PATH ($APK_SIZE_MB MB) as $TAG"
 
-            NOTES="Etsuko Mobile v${VERSION_NAME} - Reliability release for every device: songs no longer cut off on MediaTek phones (vivo/oppo/realme) because audio now prefers the hardware-decoded AAC stream, a track that ends far too early is detected and resumed instead of silently stopping, carriers with broken IPv6 no longer stall stream connections, and leaving video mode now stops the video decoder instead of letting it keep running under the song."
+            NOTES="Etsuko Mobile v${VERSION_NAME} - Playback fix for devices YouTube treats as automated: the player now verifies that a stream really serves audio past the first megabyte instead of trusting a 1 MiB preview URL, so songs no longer stop after about a minute and restart forever. When every stream is preview-only, the guest session is refreshed once and resolution is retried. Includes all v1.8.1 reliability work: hardware AAC preference, early-end recovery, IPv4-first DNS, and video teardown."
             gh release create "$TAG" "etsuko-mobile.apk" \
               --repo "${{ github.repository }}" \
               --title "Etsuko Mobile $TAG" \

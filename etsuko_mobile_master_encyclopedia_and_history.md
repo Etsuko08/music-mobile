@@ -1,9 +1,9 @@
-# Etsuko Mobile - Master Development Chronicle & Architecture Encyclopedia (v1.0.0 - v1.8.1)
+# Etsuko Mobile - Master Development Chronicle & Architecture Encyclopedia (v1.0.0 - v1.8.2)
 
 > [!IMPORTANT]
 > **MANDATORY DIRECTIVE FOR ALL FUTURE SESSIONS:**  
 > Before modifying, compiling, or refactoring ANY code in this repository, **YOU MUST READ THIS ENTIRE DOCUMENT FIRST**.  
-> This file records every user order, bug encounter, architectural failure, technical root cause, and permanent solution from `v1.0.0` through `v1.8.0`.
+> This file records every user order, bug encounter, architectural failure, technical root cause, and permanent solution from `v1.0.0` through `v1.8.2`.
 
 ---
 
@@ -386,3 +386,33 @@ v1.8.0 fixed the `ChunkedDataSource` end-of-input bug, which explained a *fresh 
 
 ### Rollback
 v1.8.0 is the known-good playback baseline: commit `c5b081c`, release tag `v1.8.0`. `git reset --hard c5b081c` restores it.
+
+---
+
+## 6. v1.8.2 - Preview-Stream Probe (OPPO CPH2641 "stops after ~1 minute")
+
+### User Report
+> *"my friend's OPPO stops after about a minute and the same song keeps repeating; search also replays the same song on skip/auto-next, and the library lists repetitive songs."*
+
+### Device evidence
+The v1.8.1 release log from the affected device (`OPPO CPH2641`, Android 14, app 1.8.1/10801, arm64Gms) shows:
+
+* `MAIN_CLIENT ANDROID_VR` → `LOGIN_REQUIRED: Sign in to confirm that you're not a bot`.
+* `VISIONOS` → `UNPLAYABLE` with the same bot reason.
+* `IOS` → status `OK`, but the stream is a **~1 MiB preview URL**.
+* Playback reads two 512 KB chunks, then `ChunkedDataSource: Retrying chunk open at 1048576` and `Response code: 403`. At 130,738 bit/s, 1 MiB ≈ 64 s, which matches "stops after ~1 minute".
+* Later 403s at 849,023 / 687 KB are the same cap: a 512 KB chunk that *starts* below 1 MiB but *ends* above it.
+* The song is then re-resolved, reaches `STATE_READY`, which resets the per-song retry counter, and dies at the cap again. That loop is what the user perceives as "the same song repeating".
+
+### Root cause
+`YTPlayerUtils.validateStatus(url)` only asked for `Range: bytes=0-0`. A preview URL answers `206` for the first byte, so every preview looked playable. Upstream Convx later replaced this with `YouTube.probeAudioStream(url, contentLength)`, which reads real bytes at ~1.5 MiB.
+
+### Fixes
+* `YTPlayerUtils.kt`
+  * `validateStatus(url, contentLength)` now probes `bytes=1_572_864-…` (or the tail of short files), with the web UA, `Origin`/`Referer: music.youtube.com`, `Accept-Encoding: identity`, and a 6 s call timeout. It validates `Content-Range` (`first == start`, `last` in range, `total > last`), rejects 401/403/404/410/416 (416 is retried from byte 0 for short files with no length), checks the media content type, and requires 16 KiB of real body bytes.
+  * Both call sites (direct URL and n-transform re-validation) pass `format?.contentLength`.
+  * If every client that produced a URL was refused by the probe, resolution throws `"Stream was refused beyond YouTube's preview window; sign in to confirm that you're not a bot"` instead of playing the preview. `BotDetectionMitigator.notifyPlaybackFailure` recognises that signature, rotates the guest `visitorData` (once per 5 min), and retries resolution. `WEB_REMIX` now gets a real chance to run with its web PoToken.
+* No queue/library changes: `SearchResultQueue`, `ListQueue`, `YouTubeQueue`, `OnlineSearchViewModel`, `LibraryViewModels` and the `song` DAO queries already match upstream and already de-duplicate. The "repeating song / repetitive list" report was the preview-retry loop above, not duplicate queue entries.
+
+### Rollback
+v1.8.1 is the previous baseline: commit `68c60ff`, release tag `v1.8.1`.
