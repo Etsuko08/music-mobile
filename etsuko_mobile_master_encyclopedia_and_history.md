@@ -439,6 +439,8 @@ v1.8.2 attributed the "repeating song / repetitive list" report to the 1 MiB pre
   * Both search result call sites pass the new `TappedSongStartsRadioKey` preference, so tapping any search result starts radio from that song. Long-press menus are unchanged.
 * `AppleLibrarySubscreens.kt`
   * Tapping a song row in the library Songs list starts radio from it. The Play and Shuffle buttons still queue the whole list, and local files (no YouTube id) keep list playback.
+* `AutoPlaylistScreen.kt`
+  * The same tap rule applies to the Liked, Downloaded, Uploaded and other auto-playlist rows reached from Library. Their Play/Shuffle buttons still queue the list.
 * `AppSearchController.kt`
   * A one-time migration resets a stored `SearchSourceKey=LOCAL` to `ONLINE` and records `SearchSourceOnlineDefaultAppliedKey`, so search opens on YouTube Music after the update. Local-only mode still forces the LOCAL tab, and a later manual toggle is respected.
 * `PlayerAdvancedSettings.kt`, `PreferenceKeys.kt`, `convx_strings.xml`
