@@ -52,6 +52,7 @@ import com.convx.music.constants.ShufflePlaylistFirstKey
 import com.convx.music.constants.SkipSilenceInstantKey
 import com.convx.music.constants.SkipSilenceKey
 import com.convx.music.constants.StopMusicOnTaskClearKey
+import com.convx.music.constants.TappedSongStartsRadioKey
 import com.convx.music.ui.component.IconButton
 import com.convx.music.ui.component.IosSettingsGroup
 import com.convx.music.ui.component.IosSettingsItem
@@ -135,6 +136,10 @@ fun PlayerAdvancedSettings(
     val (preventDuplicateTracksInQueue, onPreventDuplicateTracksInQueueChange) = rememberPreference(
         PreventDuplicateTracksInQueueKey,
         defaultValue = false
+    )
+    val (tappedSongStartsRadio, onTappedSongStartsRadioChange) = rememberPreference(
+        TappedSongStartsRadioKey,
+        defaultValue = true
     )
 
     val (stopMusicOnTaskClear, onStopMusicOnTaskClearChange) = rememberPreference(
@@ -350,6 +355,18 @@ fun PlayerAdvancedSettings(
                                 )
                             },
                             onClick = { onPreventDuplicateTracksInQueueChange(!preventDuplicateTracksInQueue) }
+                        ),
+                        IosSettingsItem(
+                            icon = painterResource(R.drawable.radio),
+                            title = { Text(stringResource(R.string.tapped_song_starts_radio)) },
+                            description = { Text(stringResource(R.string.tapped_song_starts_radio_desc)) },
+                            trailingContent = {
+                                Switch(
+                                    checked = tappedSongStartsRadio,
+                                    onCheckedChange = onTappedSongStartsRadioChange
+                                )
+                            },
+                            onClick = { onTappedSongStartsRadioChange(!tappedSongStartsRadio) }
                         ),
                     )
                 )

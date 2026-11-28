@@ -104,13 +104,16 @@ import com.convx.music.constants.PlaylistViewTypeKey
 import com.convx.music.constants.SongSortDescendingKey
 import com.convx.music.constants.SongSortType
 import com.convx.music.constants.SongSortTypeKey
+import com.convx.music.constants.TappedSongStartsRadioKey
 import com.convx.music.db.entities.Artist
 import com.convx.music.db.entities.LocalItem
 import com.convx.music.db.entities.Song
 import com.convx.music.extensions.toMediaItem
+import com.convx.music.models.toMediaMetadata
 import com.convx.music.playback.DownloadTarget
 import com.convx.music.playback.downloadSongs
 import com.convx.music.playback.queues.ListQueue
+import com.convx.music.playback.queues.YouTubeQueue
 import com.convx.music.ui.component.CreatePlaylistDialog
 import com.convx.music.ui.component.TopFadeBlur
 import com.convx.music.ui.component.ListScrollRail
@@ -708,6 +711,7 @@ private fun AppleSongList(
 ) {
     val playerConnection = LocalPlayerConnection.current
     val state = rememberLazyListState()
+    val (tappedSongStartsRadio) = rememberPreference(TappedSongStartsRadioKey, defaultValue = true)
 
     // By title, Apple groups under letter headers.
     val sections = remember(songs, sortType) {
@@ -731,6 +735,17 @@ private fun AppleSongList(
         playerConnection?.playQueue(
             if (shuffle) ListQueue(title = title, items = items.shuffled()) else ListQueue(title = title, items = items, startIndex = start),
         )
+    }
+
+    // Tapping a row starts radio from it, so playback continues with similar music instead of
+    // walking the same library list again. Play/Shuffle still queue the whole list, and local
+    // files stay list-based because they have no YouTube radio.
+    fun playTapped(song: Song, index: Int) {
+        if (tappedSongStartsRadio && !song.song.isLocal) {
+            playerConnection?.playQueue(YouTubeQueue.radio(song.toMediaMetadata()))
+        } else {
+            play(index)
+        }
     }
 
     AppleSubpage(
@@ -776,13 +791,13 @@ private fun AppleSongList(
                 val base = offset
                 item(key = "h_$letter", contentType = "header") { LetterHeader(letter) }
                 itemsIndexed(list, key = { _, s -> s.id }, contentType = { _, _ -> "song" }) { i, song ->
-                    SongRow(song, navController) { play(base + i) }
+                    SongRow(song, navController) { playTapped(song, base + i) }
                 }
                 offset += list.size
             }
         } else {
             itemsIndexed(songs, key = { _, s -> s.id }, contentType = { _, _ -> "song" }) { i, song ->
-                SongRow(song, navController) { play(i) }
+                SongRow(song, navController) { playTapped(song, i) }
             }
         }
     }

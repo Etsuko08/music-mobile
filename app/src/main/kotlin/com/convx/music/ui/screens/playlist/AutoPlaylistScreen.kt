@@ -112,10 +112,13 @@ import com.convx.music.R
 import com.convx.music.constants.SongSortDescendingKey
 import com.convx.music.constants.SongSortType
 import com.convx.music.constants.SongSortTypeKey
+import com.convx.music.constants.TappedSongStartsRadioKey
 import com.convx.music.constants.YtmSyncKey
 import com.convx.music.db.entities.Song
 import com.convx.music.extensions.toMediaItem
+import com.convx.music.models.toMediaMetadata
 import com.convx.music.playback.queues.ListQueue
+import com.convx.music.playback.queues.YouTubeQueue
 import com.convx.music.ui.component.buildAlphabetSectionIndex
 import com.convx.music.ui.component.ListScrollRail
 import com.convx.music.ui.component.AnimatedPlayPauseIcon
@@ -189,6 +192,7 @@ fun AutoPlaylistScreen(
         SongSortType.CREATE_DATE,
     )
     val (sortDescending, onSortDescendingChange) = rememberPreference(SongSortDescendingKey, true)
+    val (tappedSongStartsRadio) = rememberPreference(TappedSongStartsRadioKey, defaultValue = true)
 
     // Refresh liked and uploaded playlists when opened.
     val (ytmSync) = rememberPreference(YtmSyncKey, true)
@@ -471,13 +475,22 @@ fun AutoPlaylistScreen(
                                             } else if (song.id == mediaMetadata?.id) {
                                                 playerConnection.togglePlayPause()
                                             } else {
-                                                playerConnection.playQueue(
-                                                    ListQueue(
-                                                        title = playlistName,
-                                                        items = songs.map { it.toMediaItem() },
-                                                        startIndex = songs.indexOfFirst { it.id == song.id },
-                                                    ),
-                                                )
+                                                // Library lists continue with similar music instead
+                                                // of looping the same saved subset. Play/Shuffle
+                                                // above still queue the whole list.
+                                                if (tappedSongStartsRadio && !song.song.isLocal) {
+                                                    playerConnection.playQueue(
+                                                        YouTubeQueue.radio(song.toMediaMetadata()),
+                                                    )
+                                                } else {
+                                                    playerConnection.playQueue(
+                                                        ListQueue(
+                                                            title = playlistName,
+                                                            items = songs.map { it.toMediaItem() },
+                                                            startIndex = songs.indexOfFirst { it.id == song.id },
+                                                        ),
+                                                    )
+                                                }
                                             }
                                         },
                                         onLongClick = {

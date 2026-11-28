@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,10 +24,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.datastore.preferences.core.edit
 import androidx.navigation.NavHostController
 import com.convx.music.constants.PauseSearchHistoryKey
 import com.convx.music.constants.SearchSource
 import com.convx.music.constants.SearchSourceKey
+import com.convx.music.constants.SearchSourceOnlineDefaultAppliedKey
 import com.convx.music.db.MusicDatabase
 import com.convx.music.db.entities.SearchHistory
 import com.convx.music.ui.component.NavSearchState
@@ -37,6 +40,7 @@ import com.convx.music.utils.rememberEnumPreference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /** The nav bar's search field state and the enter/exit/submit handlers around it. */
@@ -109,6 +113,20 @@ fun rememberAppSearchController(
     var storedSearchSource by sourceState
     // Keep the online preference so it is restored when local-only mode ends.
     val searchSource = if (localOnlyMode) SearchSource.LOCAL else storedSearchSource
+
+    // Search opens on YouTube Music. A stored "Your Library" tab from an older build is reset
+    // once, then the user's own toggle is respected again. Local-only mode still wins.
+    LaunchedEffect(Unit) {
+        val preferences = context.dataStore.data.first()
+        if (preferences[SearchSourceOnlineDefaultAppliedKey] != true) {
+            context.dataStore.edit {
+                it[SearchSourceOnlineDefaultAppliedKey] = true
+                if (it[SearchSourceKey] != SearchSource.ONLINE.name) {
+                    it[SearchSourceKey] = SearchSource.ONLINE.name
+                }
+            }
+        }
+    }
     val searchFocusRequester = remember { FocusRequester() }
     // Hold the target visual state until navigation completes its transition.
     val visualOverride = remember { mutableStateOf<Boolean?>(null) }

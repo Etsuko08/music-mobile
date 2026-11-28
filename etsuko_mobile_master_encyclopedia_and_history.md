@@ -1,9 +1,9 @@
-# Etsuko Mobile - Master Development Chronicle & Architecture Encyclopedia (v1.0.0 - v1.8.2)
+# Etsuko Mobile - Master Development Chronicle & Architecture Encyclopedia (v1.0.0 - v1.8.3)
 
 > [!IMPORTANT]
 > **MANDATORY DIRECTIVE FOR ALL FUTURE SESSIONS:**  
 > Before modifying, compiling, or refactoring ANY code in this repository, **YOU MUST READ THIS ENTIRE DOCUMENT FIRST**.  
-> This file records every user order, bug encounter, architectural failure, technical root cause, and permanent solution from `v1.0.0` through `v1.8.2`.
+> This file records every user order, bug encounter, architectural failure, technical root cause, and permanent solution from `v1.0.0` through `v1.8.3`.
 
 ---
 
@@ -416,3 +416,39 @@ The v1.8.1 release log from the affected device (`OPPO CPH2641`, Android 14, app
 
 ### Rollback
 v1.8.1 is the previous baseline: commit `68c60ff`, release tag `v1.8.1`.
+
+---
+
+## 7. v1.8.3 - Search & Library Continuation (radio on tap)
+
+### User Report
+> *"playing a song from search ('misery') keeps playing all nine Misery results and then Hindi songs; it should continue with similar English-type songs like Convx 2.0.4-nightly. Search should open on YouTube Music, not Your Library. Library playback is too repetitive too."*
+
+### What was actually wrong
+v1.8.2 attributed the "repeating song / repetitive list" report to the 1 MiB preview-retry loop. That loop was real, but it did not explain the queue order. The queue code was byte-identical to upstream `2.0.4-nightly` (`55b11a2c`), and upstream issue **#135** describes the same complaint:
+
+* `searchResultQueue()` returned a `ListQueue` of every `SongItem` in the result set whenever more than one sibling existed. Tapping one "Misery" therefore queued all nine Misery rows, then whatever else the search page returned.
+* `YouTubeQueue` radio was only used when the result set had a single song.
+* Search defaulted to `SearchSource.ONLINE` in code, but the tab is persisted, so anyone who had tapped "Your Library" once stayed there forever.
+* Library song rows used `ListQueue` for the whole visible list, so the same saved subset looped instead of continuing to similar music.
+
+### Fixes
+* `SearchResultQueue.kt`
+  * New `startRadio` parameter (default `true`). When set, the tapped song starts a `YouTubeQueue` radio from its video id; the surrounding result rows are not queued. `false` restores the old list behavior. The single-result fallback still uses radio.
+* `OnlineSearchResult.kt`, `OnlineSearchScreen.kt`
+  * Both search result call sites pass the new `TappedSongStartsRadioKey` preference, so tapping any search result starts radio from that song. Long-press menus are unchanged.
+* `AppleLibrarySubscreens.kt`
+  * Tapping a song row in the library Songs list starts radio from it. The Play and Shuffle buttons still queue the whole list, and local files (no YouTube id) keep list playback.
+* `AutoPlaylistScreen.kt`
+  * The same tap rule applies to the Liked, Downloaded, Uploaded and other auto-playlist rows reached from Library. Their Play/Shuffle buttons still queue the list.
+* `AppSearchController.kt`
+  * A one-time migration resets a stored `SearchSourceKey=LOCAL` to `ONLINE` and records `SearchSourceOnlineDefaultAppliedKey`, so search opens on YouTube Music after the update. Local-only mode still forces the LOCAL tab, and a later manual toggle is respected.
+* `PlayerAdvancedSettings.kt`, `PreferenceKeys.kt`, `convx_strings.xml`
+  * New **Start radio from a tapped song** switch under Player > Advanced, on by default. Turning it off restores the old list-queue behavior for search and library taps.
+
+### Notes
+* No playback, decoder, DNS, signature or database changes; the v1.8.2 stream probe and guest-session rotation are untouched.
+* Upstream issue: `cosmictaserdev-creator/Convx#135`. The upstream opt-in PR (#197) defaults off; Etsuko defaults on because the requested behavior is radio-by-default, with the switch available for anyone who wants the old list queue.
+
+### Rollback
+v1.8.2 is the previous baseline: commit `84d2d6bf`, release tag `v1.8.2`.

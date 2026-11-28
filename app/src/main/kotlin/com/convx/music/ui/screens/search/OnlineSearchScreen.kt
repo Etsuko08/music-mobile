@@ -80,11 +80,13 @@ import com.convx.music.LocalPlayerAwareWindowInsets
 import com.convx.music.LocalPlayerConnection
 import com.convx.music.R
 import com.convx.music.constants.SuggestionItemHeight
+import com.convx.music.constants.TappedSongStartsRadioKey
 import com.convx.music.playback.queues.searchResultQueue
 import com.convx.music.ui.component.LocalMenuState
 import com.convx.music.ui.component.YouTubeListItem
 import com.convx.music.ui.theme.AppleTokens
 import com.convx.music.utils.listItemShape
+import com.convx.music.utils.rememberPreference
 import com.convx.music.ui.ios.compat.Surface
 import com.music.innertube.utils.YouTubeUrlParser
 import com.convx.music.ui.menu.YouTubeAlbumMenu
@@ -129,6 +131,7 @@ fun OnlineSearchScreen(
 
     val lazyListState = rememberLazyListState()
     val searchedSongsTitle = stringResource(R.string.queue_searched_songs)
+    val (tappedSongStartsRadio) = rememberPreference(TappedSongStartsRadioKey, defaultValue = true)
 
     LaunchedEffect(Unit) {
         snapshotFlow { lazyListState.firstVisibleItemScrollOffset }
@@ -328,11 +331,16 @@ fun OnlineSearchScreen(
                                     if (item.id == mediaMetadata?.id) {
                                         playerConnection.togglePlayPause()
                                     } else {
-                                        // Queue the whole suggestion list, not a one-song
-                                        // radio: the other rows the user can see should not
-                                        // vanish the moment one of them is tapped.
+                                        // Radio by default: the rows stay on screen, but Up next
+                                        // follows the tapped song instead of walking through every
+                                        // same-named result and then unrelated languages.
                                         playerConnection.playQueue(
-                                            searchResultQueue(item, viewState.items, searchedSongsTitle)
+                                            searchResultQueue(
+                                                item,
+                                                viewState.items,
+                                                searchedSongsTitle,
+                                                startRadio = tappedSongStartsRadio,
+                                            )
                                         )
                                         onDismiss()
                                     }
