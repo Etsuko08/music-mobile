@@ -1,9 +1,9 @@
-# Etsuko Mobile - Master Development Chronicle & Architecture Encyclopedia (v1.0.0 - v1.8.2)
+# Etsuko Mobile - Master Development Chronicle & Architecture Encyclopedia (v1.0.0 - v1.8.3)
 
 > [!IMPORTANT]
 > **MANDATORY DIRECTIVE FOR ALL FUTURE SESSIONS:**  
 > Before modifying, compiling, or refactoring ANY code in this repository, **YOU MUST READ THIS ENTIRE DOCUMENT FIRST**.  
-> This file records every user order, bug encounter, architectural failure, technical root cause, and permanent solution from `v1.0.0` through `v1.8.2`.
+> This file records every user order, bug encounter, architectural failure, technical root cause, and permanent solution from `v1.0.0` through `v1.8.3`.
 
 ---
 
