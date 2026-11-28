@@ -3209,7 +3209,7 @@ class MusicService :
                 currentQueue = radioQueue
                 streamResolver.prefetchUpcoming()
 
-                if (advanceIfEnded && player.playbackState == STATE_ENDED && insertStart < player.mediaItemCount) {
+                if (advanceIfEnded && player.playbackState == Player.STATE_ENDED && insertStart < player.mediaItemCount) {
                     player.seekTo(insertStart, 0L)
                     player.prepare()
                     player.play()

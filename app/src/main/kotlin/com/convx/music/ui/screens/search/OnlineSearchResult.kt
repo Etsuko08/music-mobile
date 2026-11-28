@@ -88,7 +88,7 @@ import com.convx.music.constants.NavigationBarHeight
 import com.convx.music.constants.SearchSource
 import com.convx.music.constants.TappedSongStartsRadioKey
 import com.convx.music.playback.queues.searchResultQueue
-import com.convx.music.ui.component.backdrop.layerBackdrop
+import com.convx.music.ui.component.backdrop.backdrops.layerBackdrop
 import com.convx.music.ui.utils.sideBarInset
 import com.convx.music.ui.component.ChipsRow
 import com.convx.music.ui.component.EmptyPlaceholder
