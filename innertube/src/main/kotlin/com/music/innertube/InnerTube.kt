@@ -305,6 +305,7 @@ class InnerTube {
         params: String? = null,
         continuation: String? = null,
         setLogin: Boolean = false,
+        formData: BrowseBody.FormData? = null,
     ) = withRetry {
         httpClient.post("browse") {
             ytClient(client, setLogin = setLogin || useLoginForBrowse)
@@ -317,7 +318,8 @@ class InnerTube {
                     ),
                     browseId = browseId,
                     params = params,
-                    continuation = continuation
+                    continuation = continuation,
+                    formData = formData,
                 )
             )
         }

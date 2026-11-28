@@ -35,5 +35,16 @@ fun searchResultQueue(
     }
 }
 
-private fun radioQueue(song: SongItem): Queue =
-    YouTubeQueue(WatchEndpoint(videoId = song.id), song.toMediaMetadata())
+private fun radioQueue(song: SongItem): Queue {
+    val cleanEndpoint = song.endpoint?.copy(
+        playlistId = null,
+        playlistSetVideoId = null,
+        index = null,
+    ) ?: WatchEndpoint(videoId = song.id)
+    return YouTubeQueue(
+        endpoint = cleanEndpoint,
+        preloadItem = song.toMediaMetadata(),
+        forceKeepVideoItems = song.isVideoSong,
+        deduplicateTitles = true,
+    )
+}

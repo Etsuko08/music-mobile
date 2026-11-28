@@ -11,6 +11,8 @@ import com.convx.music.models.MediaMetadata
 
 interface Queue {
     val preloadItem: MediaMetadata?
+    val keepVideoItems: Boolean
+        get() = false
 
     suspend fun getInitialStatus(): Status
 

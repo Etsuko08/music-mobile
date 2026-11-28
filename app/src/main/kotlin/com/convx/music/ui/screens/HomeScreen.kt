@@ -164,6 +164,7 @@ import com.convx.music.constants.HomeHeroCardEnabledKey
 import com.convx.music.constants.HomeSectionHiddenKey
 import com.convx.music.constants.HomeSectionOrderKey
 import com.convx.music.constants.ShowHomeMoodFiltersKey
+import com.convx.music.constants.TappedSongStartsRadioKey
 import com.convx.music.constants.ThumbnailCornerRadius
 import com.convx.music.db.MusicDatabase
 import com.convx.music.ui.component.SpotlightCard
@@ -430,8 +431,9 @@ fun HomeScreen(
         }
     }
 
+    val (tappedSongStartsRadio) = rememberPreference(TappedSongStartsRadioKey, true)
     val itemHandlers = rememberHomeItemHandlers(
-        navController, playerConnection, menuState, haptic, scope, mediaMetadataState, isPlayingState,
+        navController, playerConnection, menuState, haptic, scope, mediaMetadataState, isPlayingState, tappedSongStartsRadio,
     )
     val onLocalItemClick = itemHandlers.onLocalItemClick
     val localGridItem = itemHandlers.localGridItem
@@ -482,11 +484,39 @@ fun HomeScreen(
     }
     val newReleaseViewModel: NewReleaseViewModel = hiltViewModel()
     val newReleaseAlbums by newReleaseViewModel.newReleaseAlbums.collectAsStateWithLifecycle()
-    val topPicks = remember(chartsPage) {
+    val chartsTop = remember(chartsPage) {
         chartsPage?.sections?.firstOrNull { it.chartType == ChartType.TOP }?.items.orEmpty().filterNot { isDevotionalItem(it) }
     }
-    val trending = remember(chartsPage) {
+    val chartsTrending = remember(chartsPage) {
         chartsPage?.sections?.firstOrNull { it.chartType == ChartType.TRENDING }?.items.orEmpty().filterNot { isDevotionalItem(it) }
+    }
+    val topPicks = remember(chartsTop, dailyDiscover, similarRecommendations) {
+        val tasteSongs = buildList<YTItem> {
+            dailyDiscover?.forEach { add(it.recommendation) }
+            similarRecommendations?.forEach { rec ->
+                addAll(rec.items.filterIsInstance<SongItem>().take(3))
+            }
+        }.filterNot { isDevotionalItem(it) }.distinctBy { it.id }
+
+        if (tasteSongs.isEmpty()) {
+            chartsTop
+        } else if (chartsTop.isEmpty()) {
+            tasteSongs.take(24)
+        } else {
+            val mixed = ArrayList<YTItem>(28)
+            val seen = HashSet<String>()
+            val maxSize = maxOf(tasteSongs.size, chartsTop.size)
+            for (i in 0 until maxSize) {
+                tasteSongs.getOrNull(i)?.let { if (seen.add(it.id)) mixed.add(it) }
+                chartsTop.getOrNull(i)?.let { if (seen.add(it.id)) mixed.add(it) }
+                if (mixed.size >= 28) break
+            }
+            mixed
+        }
+    }
+    val trending = remember(chartsTrending, topPicks) {
+        val topLeadIds = topPicks.take(12).mapTo(HashSet()) { it.id }
+        chartsTrending.filterNot { it.id in topLeadIds }.ifEmpty { chartsTrending }
     }
     val cleanNewReleaseAlbums = remember(newReleaseAlbums) {
         newReleaseAlbums.filterNot { isDevotionalItem(it) }
@@ -561,6 +591,7 @@ fun HomeScreen(
                     localGridItem = localGridItem,
                     onLocalItemClick = onLocalItemClick,
                     isScrolling = remember(lazylistState) { { lazylistState.isScrollInProgress } },
+                    tappedSongStartsRadio = tappedSongStartsRadio,
                 )
 
                 LazyColumn(

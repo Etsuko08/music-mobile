@@ -344,59 +344,65 @@ fun PlaylistMenu(
     ) {
         item {
             NewActionGrid(
-                actions = listOfNotNull(
+                actions = buildList {
                     if (!isGuest) {
+                        add(
+                            NewAction(
+                                icon = {
+                                    SymbolIcon(symbol = sf("play.fill"), contentDescription = null, size = 28.dp, tint = AppTheme.colorScheme.onSurfaceVariant)
+                                },
+                                text = stringResource(R.string.play),
+                                onClick = {
+                                    onDismiss()
+                                    if (songs.isNotEmpty()) {
+                                        playerConnection.playQueue(
+                                            ListQueue(
+                                                title = playlist.playlist.name,
+                                                items = songs.map(Song::toMediaItem)
+                                            )
+                                        )
+                                    }
+                                }
+                            )
+                        )
+                        add(
+                            NewAction(
+                                icon = {
+                                    SymbolIcon(symbol = sf("shuffle"), contentDescription = null, size = 28.dp, tint = AppTheme.colorScheme.onSurfaceVariant)
+                                },
+                                text = stringResource(R.string.shuffle),
+                                onClick = {
+                                    onDismiss()
+                                    if (songs.isNotEmpty()) {
+                                        playerConnection.playQueue(
+                                            ListQueue(
+                                                title = playlist.playlist.name,
+                                                items = songs.shuffled().map(Song::toMediaItem)
+                                            )
+                                        )
+                                    }
+                                }
+                            )
+                        )
+                    }
+                    add(
                         NewAction(
                             icon = {
-                                SymbolIcon(symbol = sf("play.fill"), contentDescription = null, size = 28.dp, tint = AppTheme.colorScheme.onSurfaceVariant)
+                                SymbolIcon(symbol = sf("square.and.arrow.up"), contentDescription = null, size = 28.dp, tint = AppTheme.colorScheme.onSurfaceVariant)
                             },
-                            text = stringResource(R.string.play),
+                            text = stringResource(R.string.share),
                             onClick = {
                                 onDismiss()
-                                if (songs.isNotEmpty()) {
-                                    playerConnection.playQueue(
-                                        ListQueue(
-                                            title = playlist.playlist.name,
-                                            items = songs.map(Song::toMediaItem)
-                                        )
-                                    )
+                                val intent = Intent().apply {
+                                    action = Intent.ACTION_SEND
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, com.convx.music.utils.ShareUtils.playlistUrl(dbPlaylist?.playlist?.browseId ?: ""))
                                 }
+                                context.startActivity(Intent.createChooser(intent, null))
                             }
                         )
-                        NewAction(
-                            icon = {
-                                SymbolIcon(symbol = sf("shuffle"), contentDescription = null, size = 28.dp, tint = AppTheme.colorScheme.onSurfaceVariant)
-                            },
-                            text = stringResource(R.string.shuffle),
-                            onClick = {
-                                onDismiss()
-                                if (songs.isNotEmpty()) {
-                                    playerConnection.playQueue(
-                                        ListQueue(
-                                            title = playlist.playlist.name,
-                                            items = songs.shuffled().map(Song::toMediaItem)
-                                        )
-                                    )
-                                }
-                            }
-                        )
-                    } else null,
-                    NewAction(
-                        icon = {
-                            SymbolIcon(symbol = sf("square.and.arrow.up"), contentDescription = null, size = 28.dp, tint = AppTheme.colorScheme.onSurfaceVariant)
-                        },
-                        text = stringResource(R.string.share),
-                        onClick = {
-                            onDismiss()
-                            val intent = Intent().apply {
-                                action = Intent.ACTION_SEND
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, com.convx.music.utils.ShareUtils.playlistUrl(dbPlaylist?.playlist?.browseId ?: ""))
-                            }
-                            context.startActivity(Intent.createChooser(intent, null))
-                        }
                     )
-                ),
+                },
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 16.dp),
                 columns = if (isGuest) 1 else 3
             )

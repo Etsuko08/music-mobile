@@ -75,9 +75,12 @@ import com.convx.music.constants.SongFilterKey
 import com.convx.music.constants.SongSortDescendingKey
 import com.convx.music.constants.SongSortType
 import com.convx.music.constants.SongSortTypeKey
+import com.convx.music.constants.TappedSongStartsRadioKey
 import com.convx.music.constants.YtmSyncKey
 import com.convx.music.extensions.toMediaItem
+import com.convx.music.models.toMediaMetadata
 import com.convx.music.playback.queues.ListQueue
+import com.convx.music.playback.queues.YouTubeQueue
 import com.convx.music.ui.component.ListScrollRail
 import com.convx.music.ui.component.LargeScreenTitle
 import com.convx.music.ui.component.TopFadeBlur
@@ -122,6 +125,7 @@ fun LibrarySongsScreen(
 
     val (ytmSync) = rememberPreference(YtmSyncKey, true)
     val hideExplicit by rememberPreference(key = HideExplicitKey, defaultValue = false)
+    val (tappedSongStartsRadio) = rememberPreference(TappedSongStartsRadioKey, true)
     val hideVideoSongs by rememberPreference(key = HideVideoSongsKey, defaultValue = false)
     val dataSaverEnabled by rememberPreference(key = DataSaverEnabledKey, defaultValue = false)
     val (libraryIconsOnly) = rememberPreference(LibraryIconsOnlyKey, defaultValue = true)
@@ -447,6 +451,10 @@ fun LibrarySongsScreen(
                         .bounceClick {
                             if (song.id == mediaMetadata?.id) {
                                 playerConnection.togglePlayPause()
+                            } else if (!song.song.isLocal && tappedSongStartsRadio) {
+                                playerConnection.playQueue(
+                                    YouTubeQueue.radio(song.toMediaMetadata()),
+                                )
                             } else {
                                 playerConnection.playQueue(
                                     ListQueue(

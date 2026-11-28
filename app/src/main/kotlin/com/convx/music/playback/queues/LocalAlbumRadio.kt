@@ -44,7 +44,7 @@ class LocalAlbumRadio(
         }
     }
 
-    override fun hasNextPage(): Boolean = !firstTimeLoaded || continuation != null
+    override fun hasNextPage(): Boolean = !albumWithSongs.album.isLocal && (!firstTimeLoaded || continuation != null)
 
     fun persistenceData() = QueueState(
         albumId = albumWithSongs.album.id,
@@ -55,8 +55,20 @@ class LocalAlbumRadio(
     )
 
     override suspend fun nextPage(): List<MediaItem> = withContext(IO) {
+        if (albumWithSongs.album.isLocal) {
+            firstTimeLoaded = true
+            continuation = null
+            return@withContext emptyList()
+        }
         if (!firstTimeLoaded) {
-            playlistId = playlistId ?: YouTube.album(albumWithSongs.album.id).getOrThrow().album.playlistId
+            val resolvedPlaylistId = playlistId
+                ?: runCatching { YouTube.album(albumWithSongs.album.id).getOrNull()?.album?.playlistId }.getOrNull()
+            if (resolvedPlaylistId == null) {
+                firstTimeLoaded = true
+                continuation = null
+                return@withContext emptyList()
+            }
+            playlistId = resolvedPlaylistId
             val nextResult = YouTube.next(endpoint, continuation).getOrThrow()
             continuation = nextResult.continuation
             firstTimeLoaded = true

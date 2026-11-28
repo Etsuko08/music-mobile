@@ -19,7 +19,16 @@ class YouTubeQueue(
     override val preloadItem: MediaMetadata? = null,
     @Volatile private var continuation: String? = null,
     private var restoredStatus: Queue.Status? = null,
+    private val forceKeepVideoItems: Boolean = false,
+    private val deduplicateTitles: Boolean = true,
 ) : Queue {
+    override val keepVideoItems: Boolean
+        get() = forceKeepVideoItems || preloadItem?.isVideoSong == true
+
+    private val deduplicator = RadioTrackDeduplicator(
+        seedId = preloadItem?.id ?: endpoint.videoId,
+        seedTitle = preloadItem?.title,
+    )
     private var retryCount = 0
     private val maxRetries = 3
 
@@ -38,10 +47,18 @@ class YouTubeQueue(
                     endpoint = nextResult.endpoint
                     continuation = nextResult.continuation
                     retryCount = 0
+                    val (filteredItems, resolvedIndex) = if (deduplicateTitles) {
+                        deduplicator.filterInitial(
+                            nextResult.items,
+                            nextResult.currentIndex ?: 0,
+                        )
+                    } else {
+                        nextResult.items to (nextResult.currentIndex ?: 0)
+                    }
                     return@withContext Queue.Status(
                         title = nextResult.title,
-                        items = nextResult.items.map { it.toMediaItem() },
-                        mediaItemIndex = nextResult.currentIndex ?: 0,
+                        items = filteredItems.map { it.toMediaItem() },
+                        mediaItemIndex = resolvedIndex,
                     )
                 } catch (e: CancellationException) {
                     throw e
@@ -74,7 +91,12 @@ class YouTubeQueue(
                     endpoint = nextResult.endpoint
                     continuation = nextResult.continuation
                     retryCount = 0
-                    return@withContext nextResult.items.map { it.toMediaItem() }
+                    val items = if (deduplicateTitles) {
+                        deduplicator.filterNextPage(nextResult.items)
+                    } else {
+                        nextResult.items
+                    }
+                    return@withContext items.map { it.toMediaItem() }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {

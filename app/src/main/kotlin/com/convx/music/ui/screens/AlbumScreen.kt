@@ -436,13 +436,17 @@ fun AlbumScreen(
                     onPlay = {
                         if (filteredSongs.any { it.id == mediaMetadata?.id }) playerConnection.togglePlayPause()
                         else {
-                            playerConnection.service.getAutomix(playlistId)
                             playerConnection.playQueue(LocalAlbumRadio(albumWithSongs))
+                            if (!albumWithSongs.album.isLocal) {
+                                playerConnection.service.getAutomix(playlistId)
+                            }
                         }
                     },
                     onShuffle = {
-                        playerConnection.service.getAutomix(playlistId)
                         playerConnection.playQueue(LocalAlbumRadio(albumWithSongs.copy(songs = albumWithSongs.songs.shuffled())))
+                        if (!albumWithSongs.album.isLocal) {
+                            playerConnection.service.getAutomix(playlistId)
+                        }
                     },
                     rightSymbol = if (downloadState == Download.STATE_COMPLETED) "checkmark" else "arrow.down",
                     onRightAction = {
@@ -537,10 +541,12 @@ fun AlbumScreen(
                                     } else if (song.id == mediaMetadata?.id) {
                                         playerConnection.togglePlayPause()
                                     } else {
-                                        playerConnection.service.getAutomix(playlistId)
                                         playerConnection.playQueue(
                                             LocalAlbumRadio(albumWithSongs, startIndex = index),
                                         )
+                                        if (!albumWithSongs.album.isLocal) {
+                                            playerConnection.service.getAutomix(playlistId)
+                                        }
                                     }
                                 },
                                 onLongClick = {

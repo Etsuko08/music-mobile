@@ -309,92 +309,111 @@ fun AlbumMenu(
     ) {
         item {
             NewActionGrid(
-                actions = listOfNotNull(
+                actions = buildList {
                     if (!isGuest) {
-                        NewAction(
-                            icon = {
-                                SymbolIcon(symbol = sf("play.fill"), contentDescription = null, size = 28.dp, tint = AppTheme.colorScheme.onSurfaceVariant)
-                            },
-                            text = stringResource(R.string.play),
-                            onClick = {
-                                onDismiss()
-                                if (songs.isNotEmpty()) {
-                                    playerConnection.playQueue(
-                                        ListQueue(
-                                            title = album.album.title,
-                                            items = songs.map(Song::toMediaItem)
-                                        )
-                                    )
-                                }
-                            }
-                        )
-
-                        NewAction(
-                            icon = {
-                                SymbolIcon(symbol = sf("shuffle"), contentDescription = null, size = 28.dp, tint = AppTheme.colorScheme.onSurfaceVariant)
-                            },
-                            text = stringResource(R.string.shuffle),
-                            onClick = {
-                                onDismiss()
-                                if (songs.isNotEmpty()) {
-                                    album.album.playlistId?.let { playlistId ->
-                                        playerConnection.service.getAutomix(playlistId)
-                                    }
-                                    playerConnection.playQueue(
-                                        ListQueue(
-                                            title = album.album.title,
-                                            items = songs.shuffled().map(Song::toMediaItem)
-                                        )
-                                    )
-                                }
-                            }
-                        )
-                    } else null,
-                    NewAction(
-                        icon = {
-                            SymbolIcon(symbol = sf("photo"), contentDescription = null, size = 28.dp, tint = AppTheme.colorScheme.onSurfaceVariant)
-                        },
-                        text = stringResource(R.string.search_cover),
-                        onClick = { showCoverSearch = true }
-                    ),
-                    if (songs.any { it.song.isLocal || it.song.isDownloaded }) NewAction(
-                        icon = {
-                            SymbolIcon(symbol = sf("waveform"), contentDescription = null, size = 28.dp, tint = AppTheme.colorScheme.onSurfaceVariant)
-                        },
-                        text = stringResource(R.string.analyze_album),
-                        onClick = {
-                            com.convx.music.playback.dj.LibraryAnalysis.analyze(
-                                context,
-                                songs.filter { it.song.isLocal || it.song.isDownloaded }.map {
-                                    com.convx.music.playback.dj.LibraryAnalysis.Target(it.id, it.song.duration, it.song.title)
+                        add(
+                            NewAction(
+                                icon = {
+                                    SymbolIcon(symbol = sf("play.fill"), contentDescription = null, size = 28.dp, tint = AppTheme.colorScheme.onSurfaceVariant)
                                 },
+                                text = stringResource(R.string.play),
+                                onClick = {
+                                    onDismiss()
+                                    if (songs.isNotEmpty()) {
+                                        playerConnection.playQueue(
+                                            ListQueue(
+                                                title = album.album.title,
+                                                items = songs.map(Song::toMediaItem)
+                                            )
+                                        )
+                                    }
+                                }
                             )
-                            onDismiss()
-                        }
-                    ) else null,
-                    if (songs.any { (it.song.isLocal || it.song.isDownloaded) && it.song.duration > 0 }) NewAction(
-                        icon = {
-                            SymbolIcon(symbol = sf("waveform.path"), contentDescription = null, size = 28.dp, tint = AppTheme.colorScheme.onSurfaceVariant)
-                        },
-                        text = stringResource(R.string.split_stems_album),
-                        onClick = { showSplitNotice = true }
-                    ) else null,
-                    if (album.album.isLocal) null else NewAction(
-                        icon = {
-                            SymbolIcon(symbol = sf("square.and.arrow.up"), contentDescription = null, size = 28.dp, tint = AppTheme.colorScheme.onSurfaceVariant)
-                        },
-                        text = stringResource(R.string.share),
-                        onClick = {
-                            onDismiss()
-                            val intent = Intent().apply {
-                                action = Intent.ACTION_SEND
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, com.convx.music.utils.ShareUtils.albumUrl(album.album.playlistId ?: album.id))
-                            }
-                            context.startActivity(Intent.createChooser(intent, null))
-                        }
+                        )
+                        add(
+                            NewAction(
+                                icon = {
+                                    SymbolIcon(symbol = sf("shuffle"), contentDescription = null, size = 28.dp, tint = AppTheme.colorScheme.onSurfaceVariant)
+                                },
+                                text = stringResource(R.string.shuffle),
+                                onClick = {
+                                    onDismiss()
+                                    if (songs.isNotEmpty()) {
+                                        playerConnection.playQueue(
+                                            ListQueue(
+                                                title = album.album.title,
+                                                items = songs.shuffled().map(Song::toMediaItem)
+                                            )
+                                        )
+                                        if (!album.album.isLocal) {
+                                            album.album.playlistId?.let { playlistId ->
+                                                playerConnection.service.getAutomix(playlistId)
+                                            }
+                                        }
+                                    }
+                                }
+                            )
+                        )
+                    }
+                    add(
+                        NewAction(
+                            icon = {
+                                SymbolIcon(symbol = sf("photo"), contentDescription = null, size = 28.dp, tint = AppTheme.colorScheme.onSurfaceVariant)
+                            },
+                            text = stringResource(R.string.search_cover),
+                            onClick = { showCoverSearch = true }
+                        )
                     )
-                ),
+                    if (songs.any { it.song.isLocal || it.song.isDownloaded }) {
+                        add(
+                            NewAction(
+                                icon = {
+                                    SymbolIcon(symbol = sf("waveform"), contentDescription = null, size = 28.dp, tint = AppTheme.colorScheme.onSurfaceVariant)
+                                },
+                                text = stringResource(R.string.analyze_album),
+                                onClick = {
+                                    com.convx.music.playback.dj.LibraryAnalysis.analyze(
+                                        context,
+                                        songs.filter { it.song.isLocal || it.song.isDownloaded }.map {
+                                            com.convx.music.playback.dj.LibraryAnalysis.Target(it.id, it.song.duration, it.song.title)
+                                        },
+                                    )
+                                    onDismiss()
+                                }
+                            )
+                        )
+                    }
+                    if (songs.any { (it.song.isLocal || it.song.isDownloaded) && it.song.duration > 0 }) {
+                        add(
+                            NewAction(
+                                icon = {
+                                    SymbolIcon(symbol = sf("waveform.path"), contentDescription = null, size = 28.dp, tint = AppTheme.colorScheme.onSurfaceVariant)
+                                },
+                                text = stringResource(R.string.split_stems_album),
+                                onClick = { showSplitNotice = true }
+                            )
+                        )
+                    }
+                    if (!album.album.isLocal) {
+                        add(
+                            NewAction(
+                                icon = {
+                                    SymbolIcon(symbol = sf("square.and.arrow.up"), contentDescription = null, size = 28.dp, tint = AppTheme.colorScheme.onSurfaceVariant)
+                                },
+                                text = stringResource(R.string.share),
+                                onClick = {
+                                    onDismiss()
+                                    val intent = Intent().apply {
+                                        action = Intent.ACTION_SEND
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_TEXT, com.convx.music.utils.ShareUtils.albumUrl(album.album.playlistId ?: album.id))
+                                    }
+                                    context.startActivity(Intent.createChooser(intent, null))
+                                }
+                            )
+                        )
+                    }
+                },
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 16.dp),
                 columns = if (isGuest) 1 else 3
             )

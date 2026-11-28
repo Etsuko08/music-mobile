@@ -58,9 +58,11 @@ import com.convx.music.constants.GridCardArtShape
 import com.convx.music.db.entities.LocalItem
 import com.convx.music.db.entities.PlaylistEntity
 import com.convx.music.db.entities.Song
+import com.convx.music.extensions.toMediaItem
 import com.convx.music.models.MediaMetadata
 import com.convx.music.models.toMediaMetadata
 import com.convx.music.playback.PlayerConnection
+import com.convx.music.playback.queues.ListQueue
 import com.convx.music.playback.queues.YouTubeQueue
 import com.convx.music.ui.component.MenuState
 import com.convx.music.ui.component.SpotlightCard
@@ -117,6 +119,7 @@ internal data class HomeSectionDeps(
     val localGridItem: @Composable (LocalItem) -> Unit,
     val onLocalItemClick: (LocalItem) -> Unit,
     val isScrolling: () -> Boolean = { false },
+    val tappedSongStartsRadio: Boolean = true,
 )
 
 
@@ -492,9 +495,14 @@ internal fun ytItemMenu(item: YTItem, deps: HomeSectionDeps): Pair<List<IosMenuI
 /** Where a [YTItem] goes when tapped. Shared by every shelf that carries remote items. */
 internal fun HomeSectionDeps.openYtItem(item: YTItem) {
     when (item) {
-        is SongItem -> playerConnection.playQueue(
-            YouTubeQueue(item.endpoint ?: WatchEndpoint(videoId = item.id), item.toMediaMetadata())
-        )
+        is SongItem -> {
+            val cleanEndpoint = item.endpoint?.copy(
+                playlistId = null,
+                playlistSetVideoId = null,
+                index = null,
+            ) ?: WatchEndpoint(videoId = item.id)
+            playerConnection.playQueue(YouTubeQueue(cleanEndpoint, item.toMediaMetadata()))
+        }
         is AlbumItem -> navController.navigate(albumRoute(item.id, item.thumbnail))
         is ArtistItem -> navController.navigate(artistRoute(item.id, item.thumbnail))
         // A locally-created playlist (id prefixed "LP", see PlaylistEntity.generatePlaylistId)
@@ -549,8 +557,12 @@ internal fun Song.toShelfEntry(deps: HomeSectionDeps, mediaMetadata: State<Media
         onClick = {
             if (entry.id == mediaMetadata.value?.id) {
                 deps.playerConnection.togglePlayPause()
-            } else {
+            } else if (!entry.song.isLocal && deps.tappedSongStartsRadio) {
                 deps.playerConnection.playQueue(YouTubeQueue.radio(entry.toMediaMetadata()))
+            } else {
+                deps.playerConnection.playQueue(
+                    ListQueue(title = entry.song.title, items = listOf(entry.toMediaItem()))
+                )
             }
         },
         pop = HomePop.Local(entry),

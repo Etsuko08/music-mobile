@@ -20,14 +20,17 @@ import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.navigation.NavController
 import com.convx.music.constants.HideHomeFavoriteIconKey
+import com.convx.music.constants.TappedSongStartsRadioKey
 import com.convx.music.db.entities.Album
 import com.convx.music.db.entities.Artist
 import com.convx.music.db.entities.LocalItem
 import com.convx.music.db.entities.Playlist
 import com.convx.music.db.entities.Song
+import com.convx.music.extensions.toMediaItem
 import com.convx.music.models.MediaMetadata
 import com.convx.music.models.toMediaMetadata
 import com.convx.music.playback.PlayerConnection
+import com.convx.music.playback.queues.ListQueue
 import com.convx.music.playback.queues.YouTubeQueue
 import com.convx.music.ui.component.AlbumGridItem
 import com.convx.music.ui.component.ArtistGridItem
@@ -57,6 +60,7 @@ internal fun rememberHomeItemHandlers(
     scope: CoroutineScope,
     mediaMetadataState: State<MediaMetadata?>,
     isPlayingState: State<Boolean>,
+    tappedSongStartsRadio: Boolean = true,
 ): HomeItemHandlers {
     val (hideHomeFavoriteIcon) = rememberPreference(HideHomeFavoriteIconKey, false)
 
@@ -66,8 +70,12 @@ internal fun rememberHomeItemHandlers(
         when (localItem) {
             is Song -> if (localItem.id == mediaMetadataState.value?.id) {
                 playerConnection.togglePlayPause()
-            } else {
+            } else if (!localItem.song.isLocal && tappedSongStartsRadio) {
                 playerConnection.playQueue(YouTubeQueue.radio(localItem.toMediaMetadata()))
+            } else {
+                playerConnection.playQueue(
+                    ListQueue(title = localItem.song.title, items = listOf(localItem.toMediaItem()))
+                )
             }
 
             is Album -> navController.navigate(albumRoute(localItem.id, localItem.thumbnailUrl))
@@ -88,9 +96,13 @@ internal fun rememberHomeItemHandlers(
                         onClick = {
                             if (it.id == mediaMetadataState.value?.id) {
                                 playerConnection.togglePlayPause()
-                            } else {
+                            } else if (!it.song.isLocal && tappedSongStartsRadio) {
                                 playerConnection.playQueue(
                                     YouTubeQueue.radio(it.toMediaMetadata()),
+                                )
+                            } else {
+                                playerConnection.playQueue(
+                                    ListQueue(title = it.song.title, items = listOf(it.toMediaItem())),
                                 )
                             }
                         },

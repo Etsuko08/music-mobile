@@ -7,6 +7,7 @@ import com.music.innertube.models.BrowseEndpoint
 import com.music.innertube.models.MusicResponsiveListItemRenderer
 import com.music.innertube.models.PlaylistItem
 import com.music.innertube.models.SongItem
+import com.music.innertube.models.Tabs
 import com.music.innertube.models.WatchEndpoint
 import com.music.innertube.models.WatchEndpoint.WatchEndpointMusicSupportedConfigs.WatchEndpointMusicConfig.Companion.MUSIC_VIDEO_TYPE_ATV
 import com.music.innertube.models.YouTubeClient
@@ -73,8 +74,7 @@ internal object PlayerMapper {
             ?: firstTab?.tabRenderer?.content?.musicQueueRenderer?.content?.playlistPanelRenderer!!
         val title = firstTab?.tabRenderer?.content?.musicQueueRenderer
             ?.header?.musicQueueHeaderRenderer?.subtitle?.runs?.firstOrNull()?.text
-        val lyricsEndpoint = tabs?.getOrNull(1)?.tabRenderer?.endpoint?.browseEndpoint
-        val relatedEndpoint = tabs?.getOrNull(2)?.tabRenderer?.endpoint?.browseEndpoint
+        val (lyricsEndpoint, relatedEndpoint) = extractTabEndpoints(tabs)
         val items = playlistPanelRenderer.contents.mapNotNull { content ->
             content.playlistPanelVideoRenderer
                 ?.let(NextPage::fromPlaylistPanelVideoRenderer)
@@ -125,12 +125,13 @@ internal object PlayerMapper {
         fun addItem(item: YTItem, renderer: MusicResponsiveListItemRenderer?) {
             when (item) {
                 is SongItem -> {
-                    val isAudioTrack = renderer?.overlay
-                        ?.musicItemThumbnailOverlayRenderer?.content
-                        ?.musicPlayButtonRenderer?.playNavigationEndpoint
-                        ?.watchEndpoint?.watchEndpointMusicSupportedConfigs
-                        ?.watchEndpointMusicConfig?.musicVideoType == MUSIC_VIDEO_TYPE_ATV
-                    if (isAudioTrack) {
+                    val videoType = item.musicVideoType
+                        ?: renderer?.overlay
+                            ?.musicItemThumbnailOverlayRenderer?.content
+                            ?.musicPlayButtonRenderer?.playNavigationEndpoint
+                            ?.watchEndpoint?.watchEndpointMusicSupportedConfigs
+                            ?.watchEndpointMusicConfig?.musicVideoType
+                    if (videoType == null || videoType == MUSIC_VIDEO_TYPE_ATV) {
                         songs.add(item)
                     }
                 }
@@ -187,6 +188,30 @@ internal object PlayerMapper {
                 .trim(' ')
             "[%02d:%02d.%03d]$text".format(time / 60000, (time / 1000) % 60, time % 1000)
         }!!
+    }
+
+    internal fun extractTabEndpoints(tabs: List<Tabs.Tab>?): Pair<BrowseEndpoint?, BrowseEndpoint?> {
+        val lyricsEndpoint = tabs
+            ?.firstOrNull { tab ->
+                val browse = tab.tabRenderer.endpoint?.browseEndpoint
+                browse?.browseEndpointContextSupportedConfigs?.browseEndpointContextMusicConfig?.pageType ==
+                    BrowseEndpoint.BrowseEndpointContextSupportedConfigs.BrowseEndpointContextMusicConfig.MUSIC_PAGE_TYPE_TRACK_LYRICS ||
+                    browse?.browseId?.startsWith("MPLY") == true ||
+                    tab.tabRenderer.title?.equals("Lyrics", ignoreCase = true) == true
+            }
+            ?.tabRenderer?.endpoint?.browseEndpoint
+            ?: tabs?.getOrNull(1)?.tabRenderer?.endpoint?.browseEndpoint
+        val relatedEndpoint = tabs
+            ?.firstOrNull { tab ->
+                val browse = tab.tabRenderer.endpoint?.browseEndpoint
+                browse?.browseEndpointContextSupportedConfigs?.browseEndpointContextMusicConfig?.pageType ==
+                    BrowseEndpoint.BrowseEndpointContextSupportedConfigs.BrowseEndpointContextMusicConfig.MUSIC_PAGE_TYPE_TRACK_RELATED ||
+                    browse?.browseId?.startsWith("MPTR") == true ||
+                    tab.tabRenderer.title?.equals("Related", ignoreCase = true) == true
+            }
+            ?.tabRenderer?.endpoint?.browseEndpoint
+            ?: tabs?.getOrNull(2)?.tabRenderer?.endpoint?.browseEndpoint
+        return lyricsEndpoint to relatedEndpoint
     }
 
     private const val MAX_GET_QUEUE_SIZE = 1000

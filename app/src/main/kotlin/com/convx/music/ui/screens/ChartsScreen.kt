@@ -258,7 +258,9 @@ fun ChartsScreen(
                         )
                     }
 
-                    chartsPage?.sections?.filter { it.title != "Top music videos" }?.forEach { section ->
+                    chartsPage?.sections?.filter { section ->
+                        section.title != "Top music videos" && section.items.any { it is SongItem }
+                    }?.forEach { section ->
                         item(key = "section_title_${section.title}") {
                             NavigationTitle(
                                 title = when (section.title) {
@@ -335,7 +337,11 @@ fun ChartsScreen(
                                                         } else {
                                                             playerConnection.playQueue(
                                                                 YouTubeQueue(
-                                                                    endpoint = WatchEndpoint(videoId = song.id),
+                                                                    endpoint = song.endpoint?.copy(
+                                                                        playlistId = null,
+                                                                        playlistSetVideoId = null,
+                                                                        index = null,
+                                                                    ) ?: WatchEndpoint(videoId = song.id),
                                                                     preloadItem = song.toMediaMetadata(),
                                                                 ),
                                                             )
@@ -391,7 +397,11 @@ fun ChartsScreen(
                                                     } else {
                                                         playerConnection.playQueue(
                                                             YouTubeQueue(
-                                                                endpoint = WatchEndpoint(videoId = video.id),
+                                                                endpoint = video.endpoint?.copy(
+                                                                    playlistId = null,
+                                                                    playlistSetVideoId = null,
+                                                                    index = null,
+                                                                ) ?: WatchEndpoint(videoId = video.id),
                                                                 preloadItem = video.toMediaMetadata(),
                                                             ),
                                                         )

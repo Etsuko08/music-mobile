@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -84,8 +85,11 @@ import com.convx.music.R
 import com.convx.music.constants.MiniPlayerBottomSpacing
 import com.convx.music.constants.MiniPlayerHeight
 import com.convx.music.constants.NavigationBarHeight
+import com.convx.music.constants.SearchSource
 import com.convx.music.constants.TappedSongStartsRadioKey
 import com.convx.music.playback.queues.searchResultQueue
+import com.convx.music.ui.component.backdrop.layerBackdrop
+import com.convx.music.ui.utils.sideBarInset
 import com.convx.music.ui.component.ChipsRow
 import com.convx.music.ui.component.EmptyPlaceholder
 import com.convx.music.ui.component.LocalMenuState
@@ -446,21 +450,48 @@ fun OnlineSearchResult(
                 }
                 if (navSearch.keyboardActive) {
                     // This search overlay covers the results list, so give it an opaque background.
+                    val overlayBackdrop = rememberLayerBackdrop(
+                        onDraw = remember(hintTint) { { drawRect(hintTint); drawContent() } },
+                    )
+                    val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+                    val tabletLayout = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 600
+                    val focusedTop = if (tabletLayout) statusTop + 10.dp else maxOf(statusTop, 58.dp)
+                    val sideInset = sideBarInset()
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .background(hintTint)
                     ) {
                         HomeImageBackground()
-                        OnlineSearchScreen(
-                            query = navSearch.query.text,
-                            onQueryChange = navSearch.onQueryChange,
-                            navController = navController,
-                            onSearch = navSearch.onSubmit,
-                            onDismiss = navSearch.onCloseKeyboard,
-                            pureBlack = pureBlack,
-                            contentColor = hintOnTint,
-                        )
+                        Column(Modifier.fillMaxSize().padding(top = focusedTop)) {
+                            if (navSearch.canToggleSource) {
+                                SourceSwitch(
+                                    source = navSearch.searchSource,
+                                    onSelect = { if (it != navSearch.searchSource) navSearch.onToggleSource() },
+                                    backdrop = overlayBackdrop,
+                                    modifier = Modifier.padding(start = sideInset + 16.dp, end = 16.dp),
+                                )
+                            }
+                            Box(Modifier.weight(1f).layerBackdrop(overlayBackdrop)) {
+                                when (navSearch.searchSource) {
+                                    SearchSource.LOCAL -> LocalSearchScreen(
+                                        query = navSearch.query.text,
+                                        navController = navController,
+                                        onDismiss = navSearch.onCloseKeyboard,
+                                        pureBlack = pureBlack,
+                                    )
+                                    SearchSource.ONLINE -> OnlineSearchScreen(
+                                        query = navSearch.query.text,
+                                        onQueryChange = navSearch.onQueryChange,
+                                        navController = navController,
+                                        onSearch = navSearch.onSubmit,
+                                        onDismiss = navSearch.onCloseKeyboard,
+                                        pureBlack = pureBlack,
+                                        contentColor = hintOnTint,
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }

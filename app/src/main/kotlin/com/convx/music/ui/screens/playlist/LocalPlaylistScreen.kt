@@ -154,6 +154,7 @@ import com.convx.music.constants.PlaylistSongSortDescendingKey
 import com.convx.music.constants.PlaylistSongSortType
 import com.convx.music.constants.PlaylistSongSortTypeKey
 import com.convx.music.constants.SwipeToRemoveSongKey
+import com.convx.music.constants.TappedSongStartsRadioKey
 import com.convx.music.db.entities.Playlist
 import com.convx.music.db.entities.PlaylistSong
 import com.convx.music.db.entities.PlaylistSongMap
@@ -161,6 +162,7 @@ import com.convx.music.extensions.move
 import com.convx.music.extensions.toMediaItem
 import com.convx.music.models.toMediaMetadata
 import com.convx.music.playback.queues.ListQueue
+import com.convx.music.playback.queues.YouTubeQueue
 import com.convx.music.ui.component.ActionPromptDialog
 import com.convx.music.ui.component.DefaultDialog
 import com.convx.music.ui.component.EmptyPlaceholder
@@ -272,6 +274,7 @@ fun LocalPlaylistScreen(
         true
     )
     var locked by rememberPreference(PlaylistEditLockKey, defaultValue = true)
+    val (tappedSongStartsRadio) = rememberPreference(TappedSongStartsRadioKey, true)
 
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -855,6 +858,10 @@ fun LocalPlaylistScreen(
                                             onCheckedChange(!selection.contains(song.map.id))
                                         } else if (song.song.id == mediaMetadata?.id) {
                                             playerConnection.togglePlayPause()
+                                        } else if (!song.song.song.isLocal && tappedSongStartsRadio) {
+                                            playerConnection.playQueue(
+                                                YouTubeQueue.radio(song.song.toMediaMetadata())
+                                            )
                                         } else {
                                             playlist?.let { currentPlaylist ->
                                                 playerConnection.playQueue(

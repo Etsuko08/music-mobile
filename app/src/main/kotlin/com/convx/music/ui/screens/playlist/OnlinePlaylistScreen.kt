@@ -116,6 +116,7 @@ import com.convx.music.LocalPlayerConnection
 import com.convx.music.LocalTabView
 import com.convx.music.R
 import com.convx.music.constants.HideExplicitKey
+import com.convx.music.constants.TappedSongStartsRadioKey
 import com.convx.music.db.entities.Playlist
 import com.convx.music.db.entities.PlaylistEntity
 import com.convx.music.db.entities.PlaylistSongMap
@@ -229,6 +230,7 @@ fun OnlinePlaylistScreen(
     val error by viewModel.error.collectAsStateWithLifecycle()
 
     val hideExplicit by rememberPreference(key = HideExplicitKey, defaultValue = false)
+    val (tappedSongStartsRadio) = rememberPreference(TappedSongStartsRadioKey, true)
 
     val lazyListState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -496,6 +498,20 @@ fun OnlinePlaylistScreen(
                                             onCheckedChange(songItem.id !in selection)
                                         } else if (songItem.id == mediaMetadata?.id) {
                                             playerConnection.togglePlayPause()
+                                        } else if (tappedSongStartsRadio) {
+                                            val cleanEndpoint = songItem.endpoint?.copy(
+                                                playlistId = null,
+                                                playlistSetVideoId = null,
+                                                index = null,
+                                            ) ?: WatchEndpoint(videoId = songItem.id)
+                                            playerConnection.playQueue(
+                                                YouTubeQueue(
+                                                    endpoint = cleanEndpoint,
+                                                    preloadItem = songItem.toMediaMetadata(),
+                                                    forceKeepVideoItems = songItem.isVideoSong,
+                                                    deduplicateTitles = true,
+                                                )
+                                            )
                                         } else {
                                             playerConnection.playQueue(
                                                 YouTubePlaylistQueue(
@@ -572,7 +588,14 @@ fun OnlinePlaylistScreen(
                                                         is AlbumItem -> navController.navigate(albumRoute(item.browseId, item.thumbnail))
                                                         is ArtistItem -> navController.navigate(artistRoute(item.id, item.thumbnail))
                                                         is SongItem -> playerConnection.playQueue(
-                                                            YouTubeQueue(WatchEndpoint(videoId = item.id))
+                                                            YouTubeQueue(
+                                                                endpoint = item.endpoint?.copy(
+                                                                    playlistId = null,
+                                                                    playlistSetVideoId = null,
+                                                                    index = null,
+                                                                ) ?: WatchEndpoint(videoId = item.id),
+                                                                preloadItem = item.toMediaMetadata(),
+                                                            )
                                                         )
                                                     }
                                                 },

@@ -36,7 +36,6 @@ import com.convx.music.ui.component.NavSearchState
 import com.convx.music.ui.screens.Screens
 import com.convx.music.utils.dataStore
 import com.convx.music.utils.get
-import com.convx.music.utils.rememberEnumPreference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -109,21 +108,21 @@ fun rememberAppSearchController(
     // navigation leaves both search routes.
     val keyboardActive = rememberSaveable { mutableStateOf(false) }
     var searchKeyboardActive by keyboardActive
-    val sourceState = rememberEnumPreference(SearchSourceKey, SearchSource.ONLINE)
+    val sourceState = rememberSaveable { mutableStateOf(SearchSource.ONLINE) }
     var storedSearchSource by sourceState
-    // Keep the online preference so it is restored when local-only mode ends.
+    // Always default Search to YouTube Music unless local-only mode is active;
+    // switching to Your Library stays scoped to the active search session.
     val searchSource = if (localOnlyMode) SearchSource.LOCAL else storedSearchSource
 
-    // Search opens on YouTube Music. A stored "Your Library" tab from an older build is reset
-    // once, then the user's own toggle is respected again. Local-only mode still wins.
+    // Reset any persisted legacy LOCAL source so Search opens on YouTube Music cleanly.
     LaunchedEffect(Unit) {
         val preferences = context.dataStore.data.first()
-        if (preferences[SearchSourceOnlineDefaultAppliedKey] != true) {
+        if (preferences[SearchSourceOnlineDefaultAppliedKey] != true ||
+            preferences[SearchSourceKey] != SearchSource.ONLINE.name
+        ) {
             context.dataStore.edit {
                 it[SearchSourceOnlineDefaultAppliedKey] = true
-                if (it[SearchSourceKey] != SearchSource.ONLINE.name) {
-                    it[SearchSourceKey] = SearchSource.ONLINE.name
-                }
+                it[SearchSourceKey] = SearchSource.ONLINE.name
             }
         }
     }
@@ -132,11 +131,11 @@ fun rememberAppSearchController(
     val visualOverride = remember { mutableStateOf<Boolean?>(null) }
     var searchVisualOverride by visualOverride
 
-    val onSearch: (String) -> Unit = remember(localOnlyMode) {
+    val onSearch: (String) -> Unit = remember(localOnlyMode, searchSource) {
         { searchQuery ->
             if (searchQuery.isNotEmpty()) {
-                // Local results are already shown live, so submitting only saves history.
-                if (!localOnlyMode) navController.openSearchResults(searchQuery) {
+                // Local results are already shown live, so submitting in Your Library only saves history.
+                if (!localOnlyMode && searchSource != SearchSource.LOCAL) navController.openSearchResults(searchQuery) {
                     // launchSingleTop can drop a new query because args share one destination ID.
                     popUpTo("search/{query}") { inclusive = true }
                 }
@@ -153,8 +152,11 @@ fun rememberAppSearchController(
     }
 
     // Let the nav bar animation finish before navigating to avoid overlapping transitions.
-    val enterSearch: () -> Unit = remember(navController, coroutineScope) {
+    val enterSearch: () -> Unit = remember(navController, coroutineScope, localOnlyMode) {
         {
+            if (!localOnlyMode) {
+                storedSearchSource = SearchSource.ONLINE
+            }
             searchVisualOverride = true
             coroutineScope.launch {
                 delay(SearchNavTransitionDelayMs)
@@ -167,10 +169,13 @@ fun rememberAppSearchController(
             }
         }
     }
-    val exitSearch: () -> Unit = remember(navController, coroutineScope) {
+    val exitSearch: () -> Unit = remember(navController, coroutineScope, localOnlyMode) {
         {
             searchKeyboardActive = false
             searchVisualOverride = false
+            if (!localOnlyMode) {
+                storedSearchSource = SearchSource.ONLINE
+            }
             coroutineScope.launch {
                 delay(SearchNavTransitionDelayMs)
                 // Remove the input and results destinations so cancel returns to the prior screen.

@@ -15,6 +15,7 @@ import com.convx.music.playback.queues.ListQueue
 import com.convx.music.playback.queues.LocalAlbumRadio
 import com.convx.music.playback.queues.Queue
 import com.convx.music.playback.queues.YouTubeAlbumRadio
+import com.convx.music.playback.queues.YouTubePlaylistQueue
 import com.convx.music.playback.queues.YouTubeQueue
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.decodeFromString
@@ -62,6 +63,16 @@ fun Queue.toPersistQueue(
                 playlistId = state.playlistId,
                 continuation = state.continuation,
                 firstTimeLoaded = state.firstTimeLoaded,
+            )
+        }
+
+        is YouTubePlaylistQueue -> {
+            val (playlistId, playlistTitle, continuation) = persistenceData()
+            queueType = QueueType.YOUTUBE_PLAYLIST
+            queueData = QueueData.YouTubePlaylistData(
+                playlistId = playlistId,
+                playlistTitle = playlistTitle,
+                continuation = continuation,
             )
         }
 
@@ -138,6 +149,21 @@ suspend fun PersistQueue.toQueue(database: MusicDatabase? = null): Queue {
                     playlistId = data.playlistId,
                     continuation = data.continuation,
                     firstTimeLoaded = data.firstTimeLoaded,
+                    restoredStatus = status,
+                )
+            }
+        }
+
+        QueueType.YOUTUBE_PLAYLIST -> {
+            val data = queueData as? QueueData.YouTubePlaylistData
+            if (data == null || data.playlistId.isBlank()) {
+                ListQueue(title, status.items, status.mediaItemIndex, status.position)
+            } else {
+                YouTubePlaylistQueue(
+                    playlistId = data.playlistId,
+                    playlistTitle = data.playlistTitle,
+                    initialContinuation = data.continuation,
+                    startIndex = status.mediaItemIndex,
                     restoredStatus = status,
                 )
             }

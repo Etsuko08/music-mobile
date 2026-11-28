@@ -36,6 +36,10 @@ sealed class QueueType : Serializable {
     object LOCAL_ALBUM_RADIO : QueueType() {
         private fun readResolve(): Any = LOCAL_ALBUM_RADIO
     }
+
+    object YOUTUBE_PLAYLIST : QueueType() {
+        private fun readResolve(): Any = YOUTUBE_PLAYLIST
+    }
 }
 
 @Stable
@@ -58,5 +62,11 @@ sealed class QueueData : Serializable {
         val playlistId: String? = null,
         val continuation: String? = null,
         val firstTimeLoaded: Boolean = false
+    ) : QueueData()
+
+    data class YouTubePlaylistData(
+        val playlistId: String,
+        val playlistTitle: String? = null,
+        val continuation: String? = null,
     ) : QueueData()
 }

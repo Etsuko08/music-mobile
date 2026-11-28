@@ -79,6 +79,7 @@ import com.convx.music.LocalPlayerAwareWindowInsets
 import com.convx.music.LocalPlayerConnection
 import com.convx.music.R
 import com.convx.music.constants.StatPeriod
+import com.convx.music.constants.TappedSongStartsRadioKey
 import com.convx.music.extensions.toMediaItem
 import com.convx.music.models.toMediaMetadata
 import com.convx.music.playback.queues.ListQueue
@@ -101,6 +102,7 @@ import com.convx.music.ui.utils.bleedStart
 import com.convx.music.ui.utils.plusStart
 import com.convx.music.utils.joinByBullet
 import com.convx.music.utils.makeTimeString
+import com.convx.music.utils.rememberPreference
 import com.convx.music.viewmodels.StatsViewModel
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -118,6 +120,7 @@ fun StatsScreen(
     val isPlaying by playerConnection.isEffectivelyPlaying.collectAsStateWithLifecycle()
     val mediaMetadata by playerConnection.mediaMetadata.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val (tappedSongStartsRadio) = rememberPreference(TappedSongStartsRadioKey, true)
 
     val indexChips by viewModel.indexChips.collectAsStateWithLifecycle()
     val mostPlayedSongs by viewModel.mostPlayedSongs.collectAsStateWithLifecycle()
@@ -339,12 +342,20 @@ fun StatsScreen(
                                                 if (song.id == mediaMetadata?.id) {
                                                     playerConnection.togglePlayPause()
                                                 } else {
-                                                    playerConnection.playQueue(
-                                                        YouTubeQueue(
-                                                            endpoint = WatchEndpoint(song.id),
-                                                            preloadItem = mostPlayedSongs[index].toMediaMetadata(),
-                                                        ),
-                                                    )
+                                                    val clickedSong = mostPlayedSongs.getOrNull(index)
+                                                    if (clickedSong != null && !clickedSong.song.isLocal && tappedSongStartsRadio) {
+                                                        playerConnection.playQueue(
+                                                            YouTubeQueue.radio(clickedSong.toMediaMetadata()),
+                                                        )
+                                                    } else {
+                                                        playerConnection.playQueue(
+                                                            ListQueue(
+                                                                title = context.getString(R.string.most_played_songs),
+                                                                items = mostPlayedSongs.map { it.toMediaItem() },
+                                                                startIndex = index,
+                                                            ),
+                                                        )
+                                                    }
                                                 }
                                             },
                                             onLongClick = {

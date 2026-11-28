@@ -81,6 +81,7 @@ import com.composables.sfsymbols.monochrome.SFMagnifyingglass
 import com.composables.sfsymbols.monochrome.SFXmark
 import com.convx.music.constants.HistorySource
 import com.convx.music.constants.InnerTubeCookieKey
+import com.convx.music.constants.TappedSongStartsRadioKey
 import com.convx.music.extensions.metadata
 import com.convx.music.extensions.toMediaItem
 import com.convx.music.models.toMediaMetadata
@@ -141,6 +142,7 @@ fun HistoryScreen(
     val playerConnection = LocalPlayerConnection.current ?: return
     val isPlaying by playerConnection.isEffectivelyPlaying.collectAsStateWithLifecycle()
     val mediaMetadata by playerConnection.mediaMetadata.collectAsStateWithLifecycle()
+    val (tappedSongStartsRadio) = rememberPreference(TappedSongStartsRadioKey, true)
 
     var inSelectMode by rememberSaveable { mutableStateOf(false) }
     val selection = rememberSaveable(
@@ -435,6 +437,10 @@ fun HistoryScreen(
                                                 onCheckedChange(event.event.id !in selection)
                                             } else if (event.song.id == mediaMetadata?.id) {
                                                 playerConnection.togglePlayPause()
+                                            } else if (!event.song.song.isLocal && tappedSongStartsRadio) {
+                                                playerConnection.playQueue(
+                                                    YouTubeQueue.radio(event.song.toMediaMetadata())
+                                                )
                                             } else {
                                                 playerConnection.playQueue(
                                                     ListQueue(

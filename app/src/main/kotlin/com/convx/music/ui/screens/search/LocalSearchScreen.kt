@@ -60,12 +60,16 @@ import com.convx.music.LocalPlayerAwareWindowInsets
 import com.convx.music.LocalPlayerConnection
 import com.convx.music.R
 import com.convx.music.constants.CONTENT_TYPE_LIST
+import com.convx.music.constants.TappedSongStartsRadioKey
 import com.convx.music.db.entities.Album
 import com.convx.music.db.entities.Artist
 import com.convx.music.db.entities.Playlist
 import com.convx.music.db.entities.Song
 import com.convx.music.extensions.toMediaItem
+import com.convx.music.models.toMediaMetadata
 import com.convx.music.playback.queues.ListQueue
+import com.convx.music.playback.queues.YouTubeQueue
+import com.convx.music.utils.rememberPreference
 import com.convx.music.ui.component.AlbumListItem
 import com.convx.music.ui.component.ArtistListItem
 import com.convx.music.ui.component.ChipsRow
@@ -161,7 +165,13 @@ fun LocalSearchScreen(
     val useGlass = glassConfig.isEnabledFor(GlassComponent.NAV_BAR) && isGlassAllowed()
     val heroBackdrop = rememberLayerBackdrop()
 
-    fun playSearchSongs(selectedSongId: String) {
+    val (tappedSongStartsRadio) = rememberPreference(TappedSongStartsRadioKey, true)
+
+    fun playSearchSongs(selectedSong: Song) {
+        if (!selectedSong.song.isLocal && tappedSongStartsRadio) {
+            playerConnection.playQueue(YouTubeQueue.radio(selectedSong.toMediaMetadata()))
+            return
+        }
         val songs = result.map
             .getOrDefault(LocalFilter.SONG, emptyList())
             .filterIsInstance<Song>()
@@ -170,7 +180,7 @@ fun LocalSearchScreen(
             ListQueue(
                 title = context.getString(R.string.queue_searched_songs),
                 items = songs,
-                startIndex = songs.indexOfFirst { it.mediaId == selectedSongId },
+                startIndex = songs.indexOfFirst { it.mediaId == selectedSong.id }.coerceAtLeast(0),
             )
         )
     }
@@ -289,7 +299,7 @@ fun LocalSearchScreen(
                                     if (item.id == mediaMetadata?.id) {
                                         playerConnection.togglePlayPause()
                                     } else {
-                                        playSearchSongs(item.id)
+                                        playSearchSongs(item)
                                     }
                                 },
                                 onLongClick = {

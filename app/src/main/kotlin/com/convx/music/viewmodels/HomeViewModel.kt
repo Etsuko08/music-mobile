@@ -46,6 +46,7 @@ import com.convx.music.db.entities.SpeedDialItem
 import com.convx.music.extensions.filterVideoSongs
 import com.convx.music.extensions.toEnum
 import com.convx.music.models.SimilarRecommendation
+import com.convx.music.models.toMediaMetadata
 import com.convx.music.ui.screens.wrapped.WrappedAudioService
 import com.convx.music.ui.screens.wrapped.WrappedManager
 import com.convx.music.utils.SyncUtils
@@ -456,11 +457,19 @@ class HomeViewModel @Inject constructor(
     }
 
     private suspend fun getDailyDiscover() {
+        val hideExplicit = context.dataStore.get(HideExplicitKey, false)
         val hideVideoSongs = context.dataStore.get(HideVideoSongsKey, false) || context.dataStore.get(DataSaverEnabledKey, false)
-        val likedSongs = database.likedSongsByCreateDateAsc().first()
-        if (likedSongs.isEmpty()) return
+        val likedSongs = database.likedSongsByCreateDateAsc().first().filterNot { it.song.isLocal }
+        val fallbackPlayed = if (likedSongs.size < 5) {
+            val monthAgo = System.currentTimeMillis() - 86400000L * 7 * 4
+            database.mostPlayedSongs(monthAgo, limit = 10).first().filterNot { it.song.isLocal }
+        } else {
+            emptyList()
+        }
+        val candidateSeeds = (likedSongs + fallbackPlayed).distinctBy { it.id }
+        if (candidateSeeds.isEmpty()) return
 
-        val seeds = likedSongs.shuffled().take(5)
+        val seeds = candidateSeeds.shuffled().take(5)
 
         val items = java.util.Collections.synchronizedList(mutableListOf<DailyDiscoverItem>())
 
@@ -471,7 +480,11 @@ class HomeViewModel @Inject constructor(
                         .getOrNull()?.relatedEndpoint ?: return@launch
                     recommendationRequest { YouTube.related(endpoint) }.onSuccess { page ->
                         val recommendations = page.songs
-                            .filter { item -> !item.explicit && (!hideVideoSongs || !item.isVideoSong) }
+                            .filter { item ->
+                                !isDevotionalItem(item) &&
+                                    (!hideExplicit || !item.explicit) &&
+                                    (!hideVideoSongs || !item.isVideoSong)
+                            }
                             .shuffled()
 
                         val recommendation = recommendations.firstOrNull { it.id != seed.id }
@@ -492,7 +505,48 @@ class HomeViewModel @Inject constructor(
         dailyDiscover.value = items.toList().distinctBy { it.recommendation.id }.shuffled()
     }
 
+    private suspend fun resolveSongsFromRelatedSeeds(
+        seeds: List<Song>,
+        hideExplicit: Boolean,
+        hideVideoSongs: Boolean,
+        limit: Int = 14,
+    ): List<Song> {
+        if (seeds.isEmpty()) return emptyList()
+        val seenSeedIds = seeds.mapTo(HashSet()) { it.id }
+        val discovered = java.util.Collections.synchronizedList(mutableListOf<SongItem>())
+        coroutineScope {
+            seeds.take(3).forEach { seed ->
+                launch(Dispatchers.IO) {
+                    val endpoint = recommendationRequest { YouTube.next(WatchEndpoint(videoId = seed.id)) }
+                        .getOrNull()?.relatedEndpoint ?: return@launch
+                    recommendationRequest { YouTube.related(endpoint) }.onSuccess { page ->
+                        page.songs.filter { item ->
+                            item.id !in seenSeedIds &&
+                                !isDevotionalItem(item) &&
+                                (!hideExplicit || !item.explicit) &&
+                                (!hideVideoSongs || !item.isVideoSong)
+                        }.take(8).let { discovered.addAll(it) }
+                    }
+                }
+            }
+        }
+        val uniqueItems = discovered.distinctBy { it.id }.shuffled().take(limit)
+        if (uniqueItems.isEmpty()) return emptyList()
+        return kotlinx.coroutines.withContext(Dispatchers.IO) {
+            uniqueItems.mapNotNull { ytSong ->
+                val existing = database.song(ytSong.id).first()
+                if (existing != null) {
+                    existing.takeIf { !it.song.isLocal && (!hideVideoSongs || !it.song.isVideo) }
+                } else {
+                    database.insert(ytSong.toMediaMetadata())
+                    database.song(ytSong.id).first()?.takeIf { !it.song.isLocal && (!hideVideoSongs || !it.song.isVideo) }
+                }
+            }
+        }
+    }
+
     private suspend fun getQuickPicks() {
+        val hideExplicit = context.dataStore.get(HideExplicitKey, false)
         val hideVideoSongs = context.dataStore.get(HideVideoSongsKey, false) || context.dataStore.get(DataSaverEnabledKey, false)
         when (quickPicksEnum.first()) {
             QuickPicks.QUICK_PICKS -> {
@@ -501,45 +555,65 @@ class HomeViewModel @Inject constructor(
                 val forgotten = database.forgottenFavorites().first()
                     .filterVideoSongs(hideVideoSongs).filterNot { it.song.isLocal }.take(8)
 
-                // Publish cached picks before optional network enrichment.
-                quickPicks.value = (relatedSongs + forgotten)
+                val localBaseline = (relatedSongs + forgotten)
                     .distinctBy { it.id }
                     .shuffled()
                     .take(20)
-                publishAllLocalItems()
-
-                val recentSong = database.latestEvent().first()?.song
-                val ytSimilarSongs = mutableListOf<Song>()
-
-                if (recentSong != null) {
-                    val endpoint = recommendationRequest { YouTube.next(WatchEndpoint(videoId = recentSong.id)) }
-                        .getOrNull()?.relatedEndpoint
-                    if (endpoint != null) {
-                        recommendationRequest { YouTube.related(endpoint) }.onSuccess { page ->
-                            page.songs.take(10).forEach { ytSong ->
-                                database.song(ytSong.id).first()?.let { localSong ->
-                                    if (!localSong.song.isLocal && (!hideVideoSongs || !localSong.song.isVideo)) {
-                                        ytSimilarSongs.add(localSong)
-                                    }
-                                }
-                            }
-                        }
-                    }
+                if (localBaseline.isNotEmpty()) {
+                    quickPicks.value = localBaseline
+                    publishAllLocalItems()
                 }
 
-                // Keep visible picks stable if enrichment returns nothing.
+                val recentSong = database.latestEvent().first()?.song?.takeIf { !it.song.isLocal }
+                val monthAgo = System.currentTimeMillis() - 86400000L * 7 * 4
+                val topPlayedSeeds = database.mostPlayedSongs(monthAgo, limit = 5).first()
+                    .filterNot { it.song.isLocal || it.id == recentSong?.id }
+                val seeds = (listOfNotNull(recentSong) + topPlayedSeeds.shuffled().take(2) + forgotten.shuffled().take(1))
+                    .distinctBy { it.id }
+                    .take(3)
+
+                val ytSimilarSongs = resolveSongsFromRelatedSeeds(
+                    seeds = seeds,
+                    hideExplicit = hideExplicit,
+                    hideVideoSongs = hideVideoSongs,
+                    limit = 14,
+                )
+
                 if (ytSimilarSongs.isNotEmpty()) {
-                    quickPicks.value = (relatedSongs + forgotten + ytSimilarSongs)
-                        .distinctBy { it.id }
+                    quickPicks.value = (
+                        ytSimilarSongs.shuffled().take(12) +
+                            relatedSongs.shuffled().take(6) +
+                            forgotten.shuffled().take(4)
+                        ).distinctBy { it.id }
                         .shuffled()
                         .take(20)
+                    publishAllLocalItems()
                 }
             }
             QuickPicks.LAST_LISTEN -> {
-                val song = database.latestEvent().first()?.song
-                if (song != null && database.hasRelatedSongs(song.id)) {
-                    quickPicks.value = database.getRelatedSongs(song.id).first()
-                        .filterVideoSongs(hideVideoSongs).filterNot { it.song.isLocal }.shuffled().take(20)
+                val song = database.latestEvent().first()?.song?.takeIf { !it.song.isLocal } ?: return
+                val localRelated = if (database.hasRelatedSongs(song.id)) {
+                    database.getRelatedSongs(song.id).first()
+                        .filterVideoSongs(hideVideoSongs).filterNot { it.song.isLocal }.shuffled()
+                } else {
+                    emptyList()
+                }
+                if (localRelated.isNotEmpty()) {
+                    quickPicks.value = localRelated.take(20)
+                }
+                if (localRelated.size < 10) {
+                    val onlineRelated = resolveSongsFromRelatedSeeds(
+                        seeds = listOf(song),
+                        hideExplicit = hideExplicit,
+                        hideVideoSongs = hideVideoSongs,
+                        limit = 15,
+                    )
+                    if (onlineRelated.isNotEmpty()) {
+                        quickPicks.value = (onlineRelated + localRelated)
+                            .distinctBy { it.id }
+                            .shuffled()
+                            .take(20)
+                    }
                 }
             }
         }
@@ -551,6 +625,7 @@ class HomeViewModel @Inject constructor(
             .filter { it.artist.isYouTubeArtist }
             .shuffled().take(3)
         val songSeeds = database.mostPlayedSongs(fromTimeStamp, limit = 5).first()
+            .filterNot { it.song.isLocal }
             .shuffled().take(2)
 
         val candidatePlaylists = java.util.Collections.synchronizedList(mutableListOf<PlaylistItem>())
@@ -665,7 +740,7 @@ class HomeViewModel @Inject constructor(
                 }
 
             val songDeferreds = database.mostPlayedSongs(fromTimeStamp, limit = 15).first()
-                .filter { it.album != null }
+                .filterNot { it.song.isLocal }
                 .shuffled().take(3)
                 .map { song ->
                     async(Dispatchers.IO) {

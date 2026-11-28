@@ -111,9 +111,12 @@ import com.convx.music.constants.HideExplicitKey
 import com.convx.music.constants.SongSortDescendingKey
 import com.convx.music.constants.SongSortType
 import com.convx.music.constants.SongSortTypeKey
+import com.convx.music.constants.TappedSongStartsRadioKey
 import com.convx.music.db.entities.Song
 import com.convx.music.extensions.toMediaItem
+import com.convx.music.models.toMediaMetadata
 import com.convx.music.playback.queues.ListQueue
+import com.convx.music.playback.queues.YouTubeQueue
 import com.convx.music.ui.component.EmptyPlaceholder
 import com.convx.music.ui.component.ExpandableText
 import com.convx.music.ui.component.LocalMenuState
@@ -180,6 +183,7 @@ fun CachePlaylistScreen(
     )
     val (sortDescending, onSortDescendingChange) = rememberPreference(SongSortDescendingKey, true)
     val hideExplicit by rememberPreference(key = HideExplicitKey, defaultValue = false)
+    val (tappedSongStartsRadio) = rememberPreference(TappedSongStartsRadioKey, true)
 
     val sortedSongs = remember(cachedSongs, sortType, sortDescending) {
         val sorted = when (sortType) {
@@ -410,6 +414,10 @@ fun CachePlaylistScreen(
                                             onCheckedChange(song.id !in selection)
                                         } else if (song.id == mediaMetadata?.id) {
                                             playerConnection.togglePlayPause()
+                                        } else if (!song.song.isLocal && tappedSongStartsRadio) {
+                                            playerConnection.playQueue(
+                                                YouTubeQueue.radio(song.toMediaMetadata())
+                                            )
                                         } else {
                                             playerConnection.playQueue(
                                                 ListQueue(

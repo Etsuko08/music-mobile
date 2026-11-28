@@ -101,9 +101,12 @@ import com.convx.music.LocalPlayerAwareWindowInsets
 import com.convx.music.LocalPlayerConnection
 import com.convx.music.R
 import com.convx.music.constants.MyTopFilter
+import com.convx.music.constants.TappedSongStartsRadioKey
 import com.convx.music.db.entities.Song
 import com.convx.music.extensions.toMediaItem
+import com.convx.music.models.toMediaMetadata
 import com.convx.music.playback.queues.ListQueue
+import com.convx.music.playback.queues.YouTubeQueue
 import com.convx.music.ui.component.buildAlphabetSectionIndex
 import com.convx.music.ui.component.ListScrollRail
 import com.convx.music.ui.component.LargeScreenTitle
@@ -173,6 +176,7 @@ fun TopPlaylistScreen(
     val isPlaying by playerConnection.isEffectivelyPlaying.collectAsStateWithLifecycle()
     val mediaMetadata by playerConnection.mediaMetadata.collectAsStateWithLifecycle()
     val maxSize = viewModel.top
+    val (tappedSongStartsRadio) = rememberPreference(TappedSongStartsRadioKey, true)
 
     val songs by viewModel.topSongs.collectAsState(null)
     val currentSongs = songs
@@ -445,6 +449,10 @@ fun TopPlaylistScreen(
                                             onCheckedChange(song.id !in selection)
                                         } else if (song.song.id == mediaMetadata?.id) {
                                             playerConnection.togglePlayPause()
+                                        } else if (!song.song.isLocal && tappedSongStartsRadio) {
+                                            playerConnection.playQueue(
+                                                YouTubeQueue.radio(song.toMediaMetadata())
+                                            )
                                         } else {
                                             songs?.let { currentSongs ->
                                                 playerConnection.playQueue(

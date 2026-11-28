@@ -1,5 +1,6 @@
 package com.music.innertube
 
+import com.music.innertube.models.MusicCardShelfRenderer
 import com.music.innertube.models.PlaylistItem
 import com.music.innertube.models.MusicResponsiveListItemRenderer
 import com.music.innertube.models.SongItem
@@ -7,6 +8,7 @@ import com.music.innertube.pages.SearchSummary
 import com.music.innertube.pages.SearchSummaryPage
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertSame
 import org.junit.Test
 
@@ -64,6 +66,25 @@ class SearchSummaryPageTest {
 
         assertEquals(listOf("Artist"), item.artists.map { it.name })
         assertEquals(201, item.duration)
+    }
+
+    @Test
+    fun `card song preserves watch endpoint`() {
+        val card = json.decodeFromString<MusicCardShelfRenderer>(
+            """{
+            "title":{"runs":[{"text":"Misery"}]},
+            "subtitle":{"runs":[{"text":"Song"},{"text":" • "},{"text":"Maroon 5"},{"text":" • "},{"text":"3:36"}]},
+            "thumbnail":{"musicThumbnailRenderer":{"thumbnail":{"thumbnails":[{"url":"https://example.org/m.jpg"}]}}},
+            "buttons":[],
+            "onTap":{"watchEndpoint":{"videoId":"vid_misery","watchEndpointMusicSupportedConfigs":{"watchEndpointMusicConfig":{"musicVideoType":"MUSIC_VIDEO_TYPE_ATV"}}}}
+        }"""
+        )
+
+        val item = SearchSummaryPage.fromMusicCardShelfRenderer(card) as SongItem
+
+        assertNotNull(item.endpoint)
+        assertEquals("vid_misery", item.endpoint?.videoId)
+        assertEquals("MUSIC_VIDEO_TYPE_ATV", item.musicVideoType)
     }
 
     private fun song(

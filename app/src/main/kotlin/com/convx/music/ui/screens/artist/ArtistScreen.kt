@@ -154,11 +154,13 @@ import com.convx.music.LocalPlayerConnection
 import com.convx.music.R
 import com.convx.music.constants.AppBarHeight
 import com.convx.music.constants.HideExplicitKey
+import com.convx.music.constants.TappedSongStartsRadioKey
 import com.convx.music.db.entities.ArtistEntity
 import com.convx.music.extensions.toMediaItem
 import com.convx.music.models.toMediaMetadata
 import com.convx.music.playback.queues.ListQueue
 import com.convx.music.playback.queues.YouTubeQueue
+import com.convx.music.playback.queues.searchResultQueue
 import com.convx.music.ui.component.AnimatedPlayPauseIcon
 import com.convx.music.ui.component.AlbumGridItem
 import com.convx.music.ui.component.ExpandableText
@@ -257,6 +259,7 @@ fun ArtistScreen(
     val librarySongs by viewModel.librarySongs.collectAsStateWithLifecycle()
     val libraryAlbums by viewModel.libraryAlbums.collectAsStateWithLifecycle()
     val hideExplicit by rememberPreference(key = HideExplicitKey, defaultValue = false)
+    val (tappedSongStartsRadio) = rememberPreference(TappedSongStartsRadioKey, true)
     val dataSaverEnabled by rememberPreference(key = DataSaverEnabledKey, defaultValue = false)
     val showArtistBackgroundVideoPref by rememberPreference(key = ShowArtistBackgroundVideoKey, defaultValue = true)
     val showArtistBackgroundVideo = if (dataSaverEnabled) false else showArtistBackgroundVideoPref
@@ -817,6 +820,10 @@ fun ArtistScreen(
                                         onClick = {
                                             if (song.id == mediaMetadata?.id) {
                                                 playerConnection.togglePlayPause()
+                                            } else if (!song.song.isLocal && tappedSongStartsRadio) {
+                                                playerConnection.playQueue(
+                                                    YouTubeQueue.radio(song.toMediaMetadata())
+                                                )
                                             } else {
                                                 playerConnection.playQueue(
                                                     ListQueue(
@@ -986,9 +993,11 @@ fun ArtistScreen(
                                                                 playerConnection.togglePlayPause()
                                                             } else {
                                                                 playerConnection.playQueue(
-                                                                    YouTubeQueue(
-                                                                        WatchEndpoint(videoId = song.id),
-                                                                        song.toMediaMetadata()
+                                                                    searchResultQueue(
+                                                                        song = song,
+                                                                        siblings = section.items,
+                                                                        title = section.title,
+                                                                        startRadio = tappedSongStartsRadio,
                                                                     ),
                                                                 )
                                                             }
@@ -1099,9 +1108,11 @@ fun ArtistScreen(
                                                         when (item) {
                                                             is SongItem ->
                                                                 playerConnection.playQueue(
-                                                                    YouTubeQueue(
-                                                                        WatchEndpoint(videoId = item.id),
-                                                                        item.toMediaMetadata()
+                                                                    searchResultQueue(
+                                                                        song = item,
+                                                                        siblings = section.items,
+                                                                        title = section.title,
+                                                                        startRadio = tappedSongStartsRadio,
                                                                     ),
                                                                 )
 

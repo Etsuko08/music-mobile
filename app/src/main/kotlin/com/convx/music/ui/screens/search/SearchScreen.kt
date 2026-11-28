@@ -492,7 +492,7 @@ private fun AppleSearchHeader(
  * Music) and "Your Library" — the catalogue, or what is on this device and saved here.
  */
 @Composable
-private fun SourceSwitch(
+internal fun SourceSwitch(
     source: SearchSource,
     onSelect: (SearchSource) -> Unit,
     backdrop: com.convx.music.ui.component.backdrop.Backdrop,

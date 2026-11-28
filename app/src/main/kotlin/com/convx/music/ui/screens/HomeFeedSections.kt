@@ -69,6 +69,7 @@ import com.convx.music.models.MediaMetadata
 import com.convx.music.models.SimilarRecommendation
 import com.convx.music.models.toMediaMetadata
 import com.convx.music.playback.queues.ListQueue
+import com.convx.music.playback.queues.YouTubeQueue
 import com.convx.music.ui.component.HomeHeroCard
 import com.convx.music.ui.component.LocalAppMotionFrozen
 import com.convx.music.ui.component.NavigationTitle
@@ -181,12 +182,16 @@ internal fun LazyListScope.heroSection(
                     )
                 },
                 onClick = {
-                    deps.playerConnection.playQueue(
-                        ListQueue(
-                            title = top.song.title,
-                            items = listOf(top.toMediaItem()),
+                    if (!top.song.isLocal && deps.tappedSongStartsRadio) {
+                        deps.playerConnection.playQueue(YouTubeQueue.radio(top.toMediaMetadata()))
+                    } else {
+                        deps.playerConnection.playQueue(
+                            ListQueue(
+                                title = top.song.title,
+                                items = quickPicks.orEmpty().distinctBy { it.id }.ifEmpty { listOf(top) }.map { it.toMediaItem() },
+                            )
                         )
-                    )
+                    }
                 },
                 modifier = Modifier
                     .padding(horizontal = AppPage.Gutter)
@@ -375,6 +380,8 @@ internal fun LazyListScope.topSongsSection(
                     val play = {
                         if (song.id == mediaMetadata.value?.id) {
                             deps.playerConnection.togglePlayPause()
+                        } else if (!song.song.isLocal && deps.tappedSongStartsRadio) {
+                            deps.playerConnection.playQueue(YouTubeQueue.radio(song.toMediaMetadata()))
                         } else {
                             deps.playerConnection.playQueue(ListQueue(title = title, items = queue, startIndex = index))
                         }
@@ -500,6 +507,8 @@ private fun LazyListScope.homeSongList(
             onClick = {
                 if (song.id == activeSongId) {
                     deps.playerConnection.togglePlayPause()
+                } else if (!song.song.isLocal && deps.tappedSongStartsRadio) {
+                    deps.playerConnection.playQueue(YouTubeQueue.radio(song.toMediaMetadata()))
                 } else {
                     deps.playerConnection.playQueue(
                         ListQueue(title = queueTitle, items = queue, startIndex = index),

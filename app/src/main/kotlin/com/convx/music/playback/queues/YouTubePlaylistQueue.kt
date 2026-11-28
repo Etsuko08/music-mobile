@@ -21,12 +21,18 @@ class YouTubePlaylistQueue(
     private val initialContinuation: String? = null,
     private val startIndex: Int = 0,
     override val preloadItem: MediaMetadata? = null,
+    private var restoredStatus: Queue.Status? = null,
 ) : Queue {
     private var continuation: String? = initialContinuation
     private var retryCount = 0
     private val maxRetries = 3
 
     override suspend fun getInitialStatus(): Queue.Status {
+        restoredStatus?.let {
+            restoredStatus = null
+            return it
+        }
+
         return withContext(IO) {
             if (initialSongs.isNotEmpty()) {
                 Queue.Status(
@@ -47,6 +53,8 @@ class YouTubePlaylistQueue(
     }
 
     override fun hasNextPage(): Boolean = continuation != null
+
+    fun persistenceData() = Triple(playlistId, playlistTitle, continuation)
 
     override suspend fun nextPage(): List<MediaItem> {
         return withContext(IO) {

@@ -50,8 +50,11 @@ import com.convx.music.constants.ArtistSongSortType
 import com.convx.music.constants.ArtistSongSortTypeKey
 import com.convx.music.constants.CONTENT_TYPE_HEADER
 import com.convx.music.constants.HideExplicitKey
+import com.convx.music.constants.TappedSongStartsRadioKey
 import com.convx.music.extensions.toMediaItem
+import com.convx.music.models.toMediaMetadata
 import com.convx.music.playback.queues.ListQueue
+import com.convx.music.playback.queues.YouTubeQueue
 import com.convx.music.ui.component.buildAlphabetSectionIndex
 import com.convx.music.ui.component.ListScrollRail
 import com.convx.music.ui.component.HideOnScrollFAB
@@ -85,6 +88,7 @@ fun ArtistSongsScreen(
     val playerConnection = LocalPlayerConnection.current ?: return
     val isPlaying by playerConnection.isEffectivelyPlaying.collectAsStateWithLifecycle()
     val mediaMetadata by playerConnection.mediaMetadata.collectAsStateWithLifecycle()
+    val (tappedSongStartsRadio) = rememberPreference(TappedSongStartsRadioKey, true)
 
     val (sortType, onSortTypeChange) = rememberEnumPreference(
         ArtistSongSortTypeKey,
@@ -180,6 +184,10 @@ fun ArtistSongsScreen(
                             onClick = {
                                 if (song.id == mediaMetadata?.id) {
                                     playerConnection.togglePlayPause()
+                                } else if (!song.song.isLocal && tappedSongStartsRadio) {
+                                    playerConnection.playQueue(
+                                        YouTubeQueue.radio(song.toMediaMetadata()),
+                                    )
                                 } else {
                                     playerConnection.playQueue(
                                         ListQueue(
